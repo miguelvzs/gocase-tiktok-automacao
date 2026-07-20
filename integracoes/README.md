@@ -24,9 +24,10 @@ Todo dia às 10h ┘                                       ↑              │
                                                     Relatório de execução  Falha tratada
 ```
 
-**Um único campo a ajustar:** `api_url`, no nó *Configuração*. Aponte para onde
-o serviço Python está publicado. Nada mais no arquivo precisa mudar — não há
-credencial embutida nem caminho de disco, então ele importa em qualquer máquina.
+**Nada a ajustar para rodar.** O campo `api_url` do nó *Configuração* já aponta
+para o serviço publicado. Não há credencial embutida nem caminho de disco, então
+o arquivo importa em qualquer máquina e funciona de imediato. Só troque `api_url`
+se rodar o serviço em outro lugar.
 
 Os outros campos do nó *Configuração*:
 
@@ -56,7 +57,7 @@ estabelecido pela própria referência, não um contorno.
 
 ## Contrato da API
 
-Base: a URL do serviço. Tudo é HTTP + JSON, sem SDK.
+Base: `https://radar-tendencia-gocase.onrender.com`. Tudo é HTTP + JSON, sem SDK.
 
 ### `POST /publicar`
 
@@ -97,12 +98,18 @@ Concluído:
     "criativo": { "gancho": "…", "legenda": "…", "hashtags": ["…"] },
     "etapas": { "arte": "ia", "video": "local" },
     "estado": "published",
-    "url_publica": "https://www.tiktok.com/@…/video/…",
-    "video_mb": 4.1,
-    "segundos": 96.4
+    "destino": "creator_inbox",
+    "url_perfil": "https://tiktok.com/@…",
+    "video_mb": 1.01,
+    "segundos": 190.3
   }
 }
 ```
+
+`url_publica` traz o link direto do post quando a TikTok o devolve. Ela
+frequentemente devolve esse campo vazio mesmo com status `published`; nesse
+caso o relatório traz `url_perfil` no lugar, para que o operador ache o post em
+vez de receber "publicado" e nenhuma forma de conferir.
 
 Falhou:
 

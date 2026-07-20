@@ -7,7 +7,10 @@
       "name": "Disparo manual",
       "type": "n8n-nodes-base.manualTrigger",
       "typeVersion": 1,
-      "position": [-460, 300]
+      "position": [
+        -460,
+        300
+      ]
     },
     {
       "parameters": {
@@ -24,7 +27,10 @@
       "name": "Todo dia às 10h",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
-      "position": [-460, 480],
+      "position": [
+        -460,
+        480
+      ],
       "disabled": true,
       "notes": "Habilite para operar sozinho. Respeite o limite diário de posts por API da TikTok."
     },
@@ -35,7 +41,7 @@
             {
               "id": "c1",
               "name": "api_url",
-              "value": "http://localhost:8000",
+              "value": "https://radar-tendencia-gocase.onrender.com",
               "type": "string"
             },
             {
@@ -64,8 +70,11 @@
       "name": "Configuração",
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
-      "position": [-240, 380],
-      "notes": "ÚNICO campo a ajustar: api_url. Aponte para onde o serviço Python está publicado. sinal_id e sku vazios = o sistema escolhe uma combinação inédita. publicar=false gera tudo sem ir ao ar."
+      "position": [
+        -240,
+        380
+      ],
+      "notes": "Já aponta para o serviço publicado. Troque api_url apenas se rodar o serviço em outro lugar. sinal_id e sku vazios = o sistema escolhe uma combinação inédita. publicar=false envia ao Creator Inbox da TikTok sem tornar público."
     },
     {
       "parameters": {
@@ -87,7 +96,10 @@
       "name": "Dispara o job",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [-20, 380],
+      "position": [
+        -20,
+        380
+      ],
       "notes": "Devolve 202 e um job_id. Não bloqueia: a geração de vídeo leva minutos e estouraria qualquer timeout HTTP."
     },
     {
@@ -99,9 +111,12 @@
       "name": "Aguarda",
       "type": "n8n-nodes-base.wait",
       "typeVersion": 1.1,
-      "position": [200, 380],
+      "position": [
+        200,
+        380
+      ],
       "webhookId": "b2000000-0000-4000-8000-000000000005",
-      "notes": "O intervalo de consulta também mantém tráfego no serviço, impedindo que ele hiberne no meio do job."
+      "notes": "Uma execução leva cerca de 3 minutos no plano gratuito, onde o CPU é lento e a codificação do vídeo domina o tempo. O intervalo de consulta também mantém tráfego no serviço, impedindo que ele hiberne no meio do job."
     },
     {
       "parameters": {
@@ -114,7 +129,10 @@
       "name": "Consulta o estado",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [420, 380]
+      "position": [
+        420,
+        380
+      ]
     },
     {
       "parameters": {
@@ -145,7 +163,10 @@
       "name": "Ainda executando?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
-      "position": [640, 380],
+      "position": [
+        640,
+        380
+      ],
       "notes": "Saída verdadeira volta para Aguarda — este é o laço de polling."
     },
     {
@@ -177,7 +198,10 @@
       "name": "Deu certo?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
-      "position": [860, 460]
+      "position": [
+        860,
+        460
+      ]
     },
     {
       "parameters": {
@@ -227,8 +251,14 @@
             },
             {
               "id": "f8",
-              "name": "url_publica",
-              "value": "={{ $json.relatorio.url_publica || 'não publicado (rascunho)' }}",
+              "name": "onde_ver",
+              "value": "={{ $json.relatorio.url_publica || $json.relatorio.url_perfil || 'sem link' }}",
+              "type": "string"
+            },
+            {
+              "id": "f10",
+              "name": "destino",
+              "value": "={{ $json.relatorio.destino }}",
               "type": "string"
             },
             {
@@ -245,7 +275,10 @@
       "name": "Relatório de execução",
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
-      "position": [1080, 380],
+      "position": [
+        1080,
+        380
+      ],
       "notes": "Equivale ao segundo agente do vídeo de referência. Ligue um nó de Gmail ou Slack aqui para notificar a operação."
     },
     {
@@ -278,39 +311,114 @@
       "name": "Falha tratada",
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
-      "position": [1080, 560],
+      "position": [
+        1080,
+        560
+      ],
       "notes": "A etapa diz onde parou: criativo, arte, video, upload ou publicacao."
     }
   ],
   "connections": {
     "Disparo manual": {
-      "main": [[{ "node": "Configuração", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Configuração",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Todo dia às 10h": {
-      "main": [[{ "node": "Configuração", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Configuração",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Configuração": {
-      "main": [[{ "node": "Dispara o job", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Dispara o job",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Dispara o job": {
-      "main": [[{ "node": "Aguarda", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Aguarda",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Aguarda": {
-      "main": [[{ "node": "Consulta o estado", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Consulta o estado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Consulta o estado": {
-      "main": [[{ "node": "Ainda executando?", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Ainda executando?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Ainda executando?": {
       "main": [
-        [{ "node": "Aguarda", "type": "main", "index": 0 }],
-        [{ "node": "Deu certo?", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Aguarda",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Deu certo?",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Deu certo?": {
       "main": [
-        [{ "node": "Relatório de execução", "type": "main", "index": 0 }],
-        [{ "node": "Falha tratada", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Relatório de execução",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Falha tratada",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     }
   },

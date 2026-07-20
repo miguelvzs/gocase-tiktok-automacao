@@ -8,6 +8,15 @@ que a plataforma exige.
 Business case para o processo seletivo de Estágio em RPA na **GoCase (GoGroup)**.
 Área de negócio: Marketing e Aquisição.
 
+**Serviço no ar:** `https://radar-tendencia-gocase.onrender.com`
+
+> **Primeira execução do dia.** O serviço está hospedado em plano gratuito e
+> hiberna após alguns minutos sem uso; a primeira chamada leva cerca de 50
+> segundos para acordá-lo. Uma execução completa leva cerca de 3 minutos nesse
+> plano — o processador é lento e a codificação do vídeo domina o tempo. O
+> fluxo n8n consulta o estado a cada 15 segundos e esse tráfego contínuo
+> impede a hibernação no meio do trabalho.
+
 ---
 
 ## O problema
@@ -317,6 +326,26 @@ Outras salvaguardas embutidas: geração de arte determinística (o mesmo concei
 produz o mesmo arquivo, o que torna uma execução reproduzível); jobs expiram
 sozinhos em 1 hora; falha de publicação preserva a etapa onde parou; e status
 indeterminado nunca dispara republicação automática, para não duplicar post.
+
+### Memória: 1011 MB → 307 MB
+
+O serviço morria por estouro de memória no container de 512 MB assim que subiu.
+Medir por estágio, antes de mexer em qualquer coisa, mostrou que arte e mockup
+somavam menos de 110 MB e o FFmpeg sozinho usava 1011 MB. Três causas:
+
+| Causa | Efeito |
+|---|---|
+| `-threads` do FFmpeg não controla o threading interno do libx264 — é preciso `threads=1` dentro de `-x264-params` | 906 → 336 MB |
+| `-loop 1` na entrada bufferizava ~150 MB sem necessidade: o `zoompan` já multiplica o quadro único pelo parâmetro `d` | 336 → 192 MB |
+| O pipeline codificava duas vezes — gerava um MP4 intermediário e o relia para aplicar a legenda | 448 → 307 MB no pico total |
+
+A especificação exigida pela TikTok não mudou. A folga que tornou isso possível
+é o tamanho do arquivo: menos de 1 MB contra um teto de 25 MB, o que permite
+preset rápido com CRF baixo sem perda visível.
+
+Registro porque a primeira hipótese estava errada — reduzi o buffer do zoom
+achando que era ele, e custava 6 MB. A medição por estágio evitou horas
+otimizando o lugar errado.
 
 ---
 
