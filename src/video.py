@@ -32,6 +32,12 @@ log = logging.getLogger(__name__)
 BASE_GOOGLE = "https://generativelanguage.googleapis.com/v1beta"
 DURACOES_VEO = {4, 6, 8}  # a API só aceita estes valores
 
+# A interface da TikTok cobre a base do vídeo com legenda, nome do perfil e
+# botões de ação. Texto colocado abaixo desta fração da altura fica escondido
+# atrás dela — foi o que aconteceu com o CTA da primeira publicação real, e só
+# apareceu ao abrir o post no aplicativo.
+ZONA_SEGURA_BASE = 0.76
+
 
 def _ffmpeg() -> str:
     """Binário estático embarcado pelo pacote. Não depende de instalação."""
@@ -339,10 +345,14 @@ def _desenhar_legenda(
     for y in range(fim_topo):
         alfa = int(215 * (1 - y / fim_topo) ** 0.75)
         pincel.line([(0, y), (largura, y)], fill=(0, 0, 0, alfa))
-    inicio_base = int(altura * 0.70)
+    inicio_base = int(altura * 0.58)
+    fim_base = int(altura * ZONA_SEGURA_BASE)
     for y in range(inicio_base, altura):
-        alfa = int(225 * ((y - inicio_base) / (altura - inicio_base)) ** 0.75)
-        pincel.line([(0, y), (largura, y)], fill=(0, 0, 0, alfa))
+        # A faixa escurece até a borda da área segura e mantém a intensidade
+        # abaixo dela: o texto termina antes, mas o degradê precisa continuar
+        # para não formar uma linha visível de corte.
+        fracao = min(1.0, (y - inicio_base) / max(1, fim_base - inicio_base))
+        pincel.line([(0, y), (largura, y)], fill=(0, 0, 0, int(225 * fracao**0.75)))
 
     margem = int(largura * 0.08)
     util = largura - 2 * margem
@@ -356,11 +366,18 @@ def _desenhar_legenda(
 
     fonte_produto = _fonte(44)
     fonte_cta = _fonte(62)
-    base_y = int(altura * 0.80)
+    # O bloco inferior termina na borda da área segura, calculado de baixo para
+    # cima a partir da altura real do texto — assim continua correto se alguém
+    # mudar o tamanho da fonte ou o CTA quebrar em duas linhas.
+    linhas_cta = _quebrar(cta, fonte_cta, util, pincel)[:2]
+    # O +24 cobre a descida dos glifos abaixo da última linha de base: sem ele
+    # o bloco encosta no limite e letras como g e q ultrapassam.
+    altura_bloco = 66 + len(linhas_cta) * 74 + 24
+    base_y = int(altura * ZONA_SEGURA_BASE) - altura_bloco
     pincel.text(
         (margem, base_y), produto, font=fonte_produto, fill=(*primaria, 255)
     )
-    for indice, linha in enumerate(_quebrar(cta, fonte_cta, util, pincel)[:2]):
+    for indice, linha in enumerate(linhas_cta):
         pincel.text(
             (margem, base_y + 66 + indice * 74),
             linha,

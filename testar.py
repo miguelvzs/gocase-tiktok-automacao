@@ -245,6 +245,32 @@ def testar_midia() -> None:
     mb = caminho_video.stat().st_size / 1024 / 1024
     checar("vídeo cabe no limite de 25 MB do upload direto", mb < 25, f"{mb:.2f} MB")
 
+    # Regressão de um defeito encontrado só ao abrir o post publicado no
+    # aplicativo: a interface da TikTok cobre a base do vídeo, e o CTA ficava
+    # escondido atrás dela.
+    import numpy as np
+
+    legenda = video._desenhar_legenda(
+        destino=TRABALHO / "legenda_zona.png",
+        gancho="Um gancho longo o suficiente para quebrar em mais de uma linha aqui",
+        cta="Monte a sua agora",
+        produto="Capinha iPhone 15 Pro",
+        paleta=paleta,
+        largura=v["largura"],
+        altura=v["altura"],
+    )
+    with Image.open(legenda) as camada:
+        pixels = np.array(camada.convert("RGBA"))
+    # Texto é pixel claro e opaco; a faixa de contraste é escura e não conta.
+    eh_texto = (pixels[:, :, 3] > 200) & (pixels[:, :, :3].max(axis=2) > 120)
+    linhas = np.where(eh_texto.sum(axis=1) > 20)[0]
+    limite = v["altura"] * video.ZONA_SEGURA_BASE
+    checar(
+        "texto respeita a área coberta pela interface da TikTok",
+        len(linhas) > 0 and linhas.max() <= limite,
+        f"último pixel em {linhas.max() / v['altura'] * 100:.1f}% (limite {video.ZONA_SEGURA_BASE * 100:.0f}%)",
+    )
+
 
 # ------------------------------------------------------------------ n8n e API
 
