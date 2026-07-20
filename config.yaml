@@ -84,9 +84,12 @@ publicacao:
   feito_com_ia: true
   # A GoCase promove o próprio negócio, não parceria paga de terceiro.
   tipo_conteudo_comercial: brand_organic
-  # Polling do status de publicação.
-  tentativas_status: 20
-  intervalo_status_segundos: 6
+  # Polling do status de publicação. A janela precisa cobrir o pior caso da
+  # TikTok, não o típico: o Creator Inbox costuma confirmar na primeira
+  # consulta, mas uma recusa pode levar vários minutos para aparecer — e sem
+  # cobrir isso o relatório diz "indeterminado" em vez do motivo real.
+  tentativas_status: 30
+  intervalo_status_segundos: 8
 
 ia:
   # Interruptores de custo. A geração de imagem e a de vídeo têm preços muito

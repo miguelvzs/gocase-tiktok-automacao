@@ -350,9 +350,7 @@ class Publicador:
                     "detalhe": ultimo,
                 }
             if estado == "failed":
-                raise ErroPublicacao(
-                    f"TikTok recusou a publicação: {self._motivo_falha(ultimo)}"
-                )
+                raise ErroPublicacao(self._traduzir_falha(self._motivo_falha(ultimo)))
             if estado in {"draft", "scheduled"}:
                 raise ErroPublicacao(
                     f"O post ficou em '{estado}' em vez de ser enviado. Isso "
@@ -387,6 +385,38 @@ class Publicador:
             if isinstance(plataforma, dict) and plataforma.get("platformPostUrl"):
                 return str(plataforma["platformPostUrl"])
         return None
+
+    @staticmethod
+    def _traduzir_falha(motivo: str) -> str:
+        """Transforma erro da plataforma em instrução acionável.
+
+        O caso dos rascunhos pendentes é o mais comum em operação: a TikTok
+        aceita no máximo 5 rascunhos por conta a cada 24 horas, e o limite só
+        aparece na falha do post — `creator-info` reporta `canPostMore: true`
+        mesmo com a fila cheia, porque esse campo mede a cota de publicação,
+        não a de rascunhos.
+        """
+        baixo = motivo.lower()
+        if "pending draft" in baixo or "5 pending" in baixo:
+            return (
+                "A conta atingiu o limite de 5 rascunhos pendentes em 24h na "
+                "TikTok. Abra o aplicativo, finalize ou descarte rascunhos "
+                "para liberar espaço, ou publique direto em vez de enviar ao "
+                "Creator Inbox."
+            )
+        if "too many posts" in baixo or "daily" in baixo:
+            return (
+                "A conta atingiu o limite diário de publicações por API da "
+                "TikTok. Aguarde a janela de 24h."
+            )
+        if "duplicate" in baixo:
+            return "A TikTok recusou por conteúdo duplicado. Varie a legenda ou a mídia."
+        if "spam_risk" in baixo:
+            return (
+                "A moderação da TikTok sinalizou o conteúdo como risco de spam. "
+                "A moderação via API é mais rígida que a do aplicativo."
+            )
+        return f"TikTok recusou a publicação: {motivo}"
 
     @staticmethod
     def _motivo_falha(post: dict[str, Any]) -> str:

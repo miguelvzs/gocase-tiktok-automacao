@@ -169,6 +169,7 @@ produção. Nenhum foi descoberto quebrando.
 | Conta pode estar no limite diário sem que a publicação avise | `canPostMore` é consultado antes; 429 vira mensagem legível |
 | Conta conectada mas com token morto falha tarde e mal | Contas com `needsReconnection` são descartadas na descoberta |
 | Conteúdo de parceria paga é recusado com visibilidade privada | Combinação `brand_content` + `SELF_ONLY` é barrada antes do envio |
+| Máximo de 5 rascunhos pendentes por conta em 24h — e `creator-info` reporta `canPostMore: true` mesmo com a fila cheia | Erro é traduzido em instrução: finalize rascunhos no aplicativo ou publique direto |
 
 ---
 

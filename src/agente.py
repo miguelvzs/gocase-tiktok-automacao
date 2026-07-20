@@ -188,6 +188,9 @@ def executar_pipeline(
                 # O post existe; só o desfecho é desconhecido. Não republicar.
                 relatorio["estado"] = "indeterminado"
                 relatorio["aviso"] = str(erro)
+                # O id permite ao operador consultar o desfecho no painel sem
+                # arriscar republicar e duplicar o post.
+                relatorio["consultar_post_id"] = criado["post_id"]
         else:
             relatorio["estado"] = "criado"
 
