@@ -106,5 +106,11 @@ def segredo(nome: str, obrigatorio: bool = False) -> str | None:
 
 
 def modo_rascunho() -> bool:
-    """Rascunho é o padrão seguro: só publica quem desliga explicitamente."""
-    return os.environ.get("MODO_RASCUNHO", "true").strip().lower() != "false"
+    """Publicar é o padrão.
+
+    O Creator Inbox parecia mais seguro, mas a TikTok aceita no máximo 5
+    rascunhos pendentes por conta em 24h e não oferece API para limpá-los —
+    uma rodada de testes trava a conta e a saída é manual, um a um no
+    aplicativo. Modo de teste que exige limpeza manual não é modo de teste.
+    """
+    return os.environ.get("MODO_RASCUNHO", "false").strip().lower() == "true"

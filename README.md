@@ -103,11 +103,17 @@ notificou a conta com *"Seu conteúdo está pronto — Edite seu vídeo antes de
 compartilhar no TikTok"*. Ou seja, o vídeo saiu do código, foi hospedado, foi
 buscado pela TikTok, passou pelo processamento dela e chegou ao criador.
 
-> **Sobre o modo desta execução.** Rodou em Creator Inbox, que percorre a
-> integração inteira sem tornar nada público. É o modo de teste correto: prova
-> todo o caminho — geração, upload, autorização, aceite da especificação do
-> vídeo — sem consumir a decisão irreversível de publicar. Trocar para
-> publicação direta é uma flag, e usa o mesmo código já exercitado aqui.
+> **Sobre o modo de publicação.** A automação publica direto no perfil. Existe
+> um modo alternativo que entrega ao Creator Inbox da TikTok, onde um humano
+> finaliza pelo aplicativo — conceitualmente atraente, porque é ali que se
+> escolhe um som em alta, e som é o que faz um vídeo circular.
+>
+> Ele foi o padrão por um tempo e se mostrou inviável na prática: a TikTok
+> aceita no máximo **5 rascunhos pendentes por conta em 24 horas** e não oferece
+> nenhuma forma de limpá-los pela API — só o aplicativo, um a um. Uma rodada de
+> testes trava a conta, e a saída é manual. Modo de teste que exige limpeza
+> manual não é modo de teste. Continua disponível por opção, com o custo
+> documentado.
 
 ---
 

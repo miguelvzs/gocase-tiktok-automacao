@@ -59,7 +59,7 @@
             {
               "id": "c4",
               "name": "publicar",
-              "value": false,
+              "value": true,
               "type": "boolean"
             }
           ]
@@ -74,7 +74,7 @@
         -240,
         380
       ],
-      "notes": "Já aponta para o serviço publicado. Troque api_url apenas se rodar o serviço em outro lugar. sinal_id e sku vazios = o sistema escolhe uma combinação inédita. publicar=false envia ao Creator Inbox da TikTok sem tornar público."
+      "notes": "Já aponta para o serviço publicado. sinal_id e sku vazios = o sistema escolhe uma combinação inédita. publicar=true vai ao ar no perfil; false envia ao Creator Inbox da TikTok, que aceita no máximo 5 rascunhos pendentes por conta em 24h e não oferece API para limpá-los."
     },
     {
       "parameters": {

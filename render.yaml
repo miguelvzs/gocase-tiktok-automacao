@@ -39,9 +39,9 @@ services:
         sync: false
 
       # --- Operação ---
-      # true  = envia para o Creator Inbox da TikTok — atravessa a integração
-      #         inteira sem nada ficar público.
-      # false = publica direto no perfil.
-      # O padrão seguro é o inbox: publicar exige uma mudança explícita.
+      # false = publica direto no perfil. É o padrão.
+      # true  = envia ao Creator Inbox da TikTok, que aceita no máximo 5
+      #         rascunhos pendentes por conta em 24h e não oferece API para
+      #         limpá-los — inviável para uso repetido.
       - key: MODO_RASCUNHO
-        value: "true"
+        value: "false"

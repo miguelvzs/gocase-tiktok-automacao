@@ -58,7 +58,13 @@ def testar_config() -> None:
         "YAML inválido cai nos padrões embutidos em vez de derrubar",
         padrao["marca"]["nome"] == "GoCase",
     )
-    checar("modo rascunho é o padrão seguro", modo_rascunho() is True)
+    # Publicar é o padrão. O Creator Inbox parecia mais seguro, mas a TikTok
+    # aceita no máximo 5 rascunhos pendentes por conta em 24h e não oferece API
+    # para limpá-los: uma rodada de testes travava a conta.
+    checar(
+        "publicar é o padrão; rascunho exige opção explícita",
+        modo_rascunho() is False,
+    )
 
 
 # ------------------------------------------------------------------- seleção

@@ -1,7 +1,7 @@
 """Execução por terminal — para desenvolvimento e para a evidência do teste.
 
-    python main.py                      # rascunho, sinal e produto automáticos
-    python main.py --publicar           # publica de verdade
+    python main.py                      # publica, sinal e produto automáticos
+    python main.py --rascunho           # envia ao Creator Inbox, sem publicar
     python main.py --sinal gamer-neon --sku CASE-SAM-S24
 """
 
@@ -25,11 +25,12 @@ def main() -> int:
     analisador.add_argument("--sinal", help="ID do sinal de tendência (ver config.yaml)")
     analisador.add_argument("--sku", help="SKU do produto (ver config.yaml)")
     analisador.add_argument(
-        "--publicar",
+        "--rascunho",
         action="store_true",
         help=(
-            "Publica direto no perfil. Sem esta flag, envia para o Creator "
-            "Inbox da TikTok — atravessa a integração inteira sem ficar público."
+            "Envia ao Creator Inbox da TikTok em vez de publicar. Cuidado: a "
+            "plataforma aceita no máximo 5 rascunhos pendentes por conta em "
+            "24h e não oferece forma de limpá-los pela API."
         ),
     )
     analisador.add_argument("--json", action="store_true", help="Imprime o relatório em JSON")
@@ -45,7 +46,7 @@ def main() -> int:
         relatorio = executar_pipeline(
             sinal_id=args.sinal,
             sku=args.sku,
-            rascunho=not args.publicar,
+            rascunho=args.rascunho,
         )
     except Exception as erro:
         print(f"\nFalhou: {erro}", file=sys.stderr)
