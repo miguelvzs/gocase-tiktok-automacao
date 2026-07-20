@@ -25,7 +25,7 @@ from pathlib import Path
 
 import httpx
 import imageio_ffmpeg
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
 log = logging.getLogger(__name__)
 
@@ -83,6 +83,7 @@ def _hex_para_rgb(valor: str) -> tuple[int, int, int]:
 def montar(
     *,
     mockup: Path,
+    arte: Path | None = None,
     destino: Path,
     gancho: str,
     cta: str,
@@ -148,6 +149,45 @@ def montar(
         largura=largura,
         altura=altura,
     )
+
+    # Vídeo em cenas, quando a arte é vetorial: a estrutura em camadas do SVG
+    # permite animar o desenho se montando antes de virar produto. Só vale para
+    # o caminho local — vídeo vindo da IA já tem movimento próprio.
+    if origem == "local" and arte is not None and arte.with_suffix(".svg").exists():
+        try:
+            from .arte import rasterizar_camadas
+
+            camadas = rasterizar_camadas(
+                arte.with_suffix(".svg"),
+                trabalho / "camadas",
+                tamanho=(512, 1024),
+                passos=10,
+            )
+            abertura = trabalho / "legenda_abertura.png"
+            _desenhar_legenda(
+                destino=abertura, gancho=gancho, cta=cta, produto=produto,
+                paleta=paleta, largura=largura, altura=altura, com_base=False,
+            )
+            _animar_cenas(
+                camadas=camadas,
+                mockup=mockup,
+                sobreposicao=sobreposicao,
+                sobreposicao_abertura=abertura,
+                destino=destino,
+                largura=largura,
+                altura=altura,
+                fps=fps,
+                duracao=duracao,
+                paleta=paleta,
+            )
+            log.info(
+                "Vídeo pronto: %s (%.1f MB, origem=cenas)",
+                destino.name,
+                destino.stat().st_size / 1024 / 1024,
+            )
+            return destino, "cenas"
+        except Exception as erro:
+            log.warning("Montagem em cenas falhou (%s); usando quadro único.", erro)
 
     _finalizar(
         base=entrada,
@@ -265,6 +305,169 @@ def _uri_do_video(corpo: dict) -> str | None:
 # ---------------------------------------------------------------- Ken Burns
 
 
+def _animar_cenas(
+    *,
+    camadas: list[Path],
+    mockup: Path,
+    sobreposicao: Path,
+    sobreposicao_abertura: Path,
+    destino: Path,
+    largura: int,
+    altura: int,
+    fps: int,
+    duracao: int,
+    paleta: dict[str, str],
+) -> None:
+    """Vídeo em cenas, com a arte se montando antes de virar produto.
+
+    Um quadro parado com zoom lento é linguagem de banco de imagens, não de
+    TikTok. Como a arte já vem em camadas vetoriais, dá para animar de verdade
+    sem IA de vídeo nenhuma:
+
+        0,0 – 2,4 s   arte se monta, elemento por elemento
+        2,4 – 3,2 s   transição da arte para o produto
+        3,2 – 8,0 s   capinha com aproximação lenta
+
+    Os quadros são gerados aqui e canalizados direto para o FFmpeg como bytes
+    crus. Nada vai a disco, e a memória fica em um quadro por vez em vez de uma
+    sequência inteira de PNGs.
+    """
+    total = duracao * fps
+    fim_montagem = int(total * 0.30)
+    fim_transicao = int(total * 0.40)
+
+    fundo_cor = _hex_para_rgb(paleta.get("fundo", "#F7F7F9"))
+    escuro = _hex_para_rgb(paleta.get("secundaria", "#1A1A2E"))
+
+    # A arte é exibida menor que a tela, centralizada, para caber a moldura.
+    arte_l = int(largura * 0.62)
+    arte_a = int(arte_l * 2)
+    quadros_arte = []
+    for caminho in camadas:
+        with Image.open(caminho) as img:
+            quadros_arte.append(img.convert("RGB").resize((arte_l, arte_a), Image.LANCZOS))
+
+    with Image.open(mockup) as img:
+        base_mockup = img.convert("RGB").copy()
+    with Image.open(sobreposicao) as img:
+        legenda = img.convert("RGBA").copy()
+    with Image.open(sobreposicao_abertura) as img:
+        legenda_abertura = img.convert("RGBA").copy()
+
+    palco = Image.new("RGB", (largura, altura), fundo_cor)
+    for y in range(altura):
+        fracao = abs(y - altura / 2) / (altura / 2)
+        palco.paste(
+            tuple(int(fundo_cor[c] * (1 - 0.12 * fracao)) for c in range(3)),
+            (0, y, largura, y + 1),
+        )
+
+    processo = subprocess.Popen(
+        [
+            _ffmpeg(), "-hide_banner", "-loglevel", "error", "-y",
+            "-f", "rawvideo", "-pix_fmt", "rgb24",
+            "-s", f"{largura}x{altura}", "-r", str(fps), "-i", "-",
+            "-f", "lavfi", "-i", "anullsrc=channel_layout=stereo:sample_rate=44100",
+            "-map", "0:v", "-map", "1:a", "-t", str(duracao),
+            "-c:v", "libx264", "-preset", PRESET, "-crf", CRF,
+            "-x264-params", X264_ECONOMICO,
+            "-pix_fmt", "yuv420p", "-profile:v", "high", "-level", "4.0",
+            "-c:a", "aac", "-b:a", "128k", "-shortest",
+            "-movflags", "+faststart",
+            str(destino),
+        ],
+        stdin=subprocess.PIPE,
+    )
+
+    try:
+        for n in range(total):
+            if n < fim_montagem:
+                quadro = _cena_montagem(
+                    palco, quadros_arte, n / fim_montagem, escuro, largura, altura
+                )
+            elif n < fim_transicao:
+                avanco = (n - fim_montagem) / max(1, fim_transicao - fim_montagem)
+                quadro = Image.blend(
+                    _cena_montagem(palco, quadros_arte, 1.0, escuro, largura, altura),
+                    base_mockup,
+                    avanco,
+                )
+            else:
+                avanco = (n - fim_transicao) / max(1, total - fim_transicao)
+                quadro = _aproximar(base_mockup, avanco, largura, altura)
+
+            # Abertura mostra só o gancho: o bloco inferior cairia sobre a
+            # arte, que ocupa o centro. Produto e CTA entram junto com a
+            # capinha, que é onde fazem sentido.
+            camada_texto = legenda if n >= fim_transicao else legenda_abertura
+            forca = min(1.0, n / max(1, fps // 2))
+            if forca >= 1.0:
+                quadro.paste(camada_texto, (0, 0), camada_texto)
+            elif forca > 0:
+                suave = camada_texto.copy()
+                suave.putalpha(
+                    camada_texto.getchannel("A").point(lambda v: int(v * forca))
+                )
+                quadro.paste(suave, (0, 0), suave)
+
+            processo.stdin.write(quadro.tobytes())  # type: ignore[union-attr]
+    finally:
+        processo.stdin.close()  # type: ignore[union-attr]
+        processo.wait()
+
+    if processo.returncode != 0:
+        raise RuntimeError(f"FFmpeg falhou ao montar as cenas (código {processo.returncode})")
+    log.info("Vídeo em cenas montado (%d camadas de arte).", len(camadas))
+
+
+def _cena_montagem(
+    palco: Image.Image,
+    camadas: list[Image.Image],
+    avanco: float,
+    borda: tuple[int, int, int],
+    largura: int,
+    altura: int,
+) -> Image.Image:
+    """Arte crescendo e ganhando elementos, centralizada no palco."""
+    indice = min(len(camadas) - 1, int(avanco * len(camadas)))
+    arte = camadas[indice]
+    escala = 0.92 + 0.08 * min(1.0, avanco * 1.2)
+    largura_arte = max(2, int(arte.width * escala))
+    altura_arte = max(2, int(arte.height * escala))
+
+    quadro = palco.copy()
+    reduzida = arte.resize((largura_arte, altura_arte), Image.LANCZOS)
+    x = (largura - largura_arte) // 2
+    y = (altura - altura_arte) // 2
+
+    # Sombra difusa, não um retângulo sólido atrás da arte: colar um bloco de
+    # cor deslocado lê como moldura preta, não como profundidade.
+    manta = Image.new("RGBA", (largura, altura), (0, 0, 0, 0))
+    ImageDraw.Draw(manta).rounded_rectangle(
+        [x + 8, y + 16, x + largura_arte + 8, y + altura_arte + 16],
+        radius=18,
+        fill=(*borda, 120),
+    )
+    quadro = Image.alpha_composite(
+        quadro.convert("RGBA"), manta.filter(ImageFilter.GaussianBlur(22))
+    ).convert("RGB")
+
+    quadro.paste(reduzida, (x, y))
+    return quadro
+
+
+def _aproximar(base: Image.Image, avanco: float, largura: int, altura: int) -> Image.Image:
+    """Aproximação lenta sobre o produto, equivalente ao Ken Burns."""
+    zoom = 1.0 + 0.14 * avanco
+    corte_l = int(largura / zoom)
+    corte_a = int(altura / zoom)
+    x = (largura - corte_l) // 2
+    y = (altura - corte_a) // 2
+    return base.crop((x, y, x + corte_l, y + corte_a)).resize(
+        (largura, altura), Image.LANCZOS
+    )
+
+
 def _ken_burns(largura: int, altura: int, fps: int, duracao: int, zoom: float) -> str:
     """Cadeia de filtros do zoom lento sobre o mockup parado.
 
@@ -332,7 +535,14 @@ def _desenhar_legenda(
     paleta: dict[str, str],
     largura: int,
     altura: int,
+    com_base: bool = True,
 ) -> Path:
+    """Camada de texto. `com_base=False` desenha só o gancho, sem produto e CTA.
+
+    A variante sem base existe para a cena de abertura: ali a arte ocupa o
+    centro da tela, e o bloco inferior cairia em cima do desenho. O CTA entra
+    quando a capinha aparece — que é também onde ele faz sentido.
+    """
     primaria = _hex_para_rgb(paleta.get("primaria", "#FF5A1F"))
     camada = Image.new("RGBA", (largura, altura), (0, 0, 0, 0))
     pincel = ImageDraw.Draw(camada)
@@ -347,7 +557,7 @@ def _desenhar_legenda(
         pincel.line([(0, y), (largura, y)], fill=(0, 0, 0, alfa))
     inicio_base = int(altura * 0.58)
     fim_base = int(altura * ZONA_SEGURA_BASE)
-    for y in range(inicio_base, altura):
+    for y in range(inicio_base, altura if com_base else inicio_base):
         # A faixa escurece até a borda da área segura e mantém a intensidade
         # abaixo dela: o texto termina antes, mas o degradê precisa continuar
         # para não formar uma linha visível de corte.
@@ -363,6 +573,11 @@ def _desenhar_legenda(
     for linha in linhas:
         pincel.text((margem, y), linha, font=fonte_gancho, fill=(255, 255, 255, 255))
         y += 88
+
+    if not com_base:
+        destino.parent.mkdir(parents=True, exist_ok=True)
+        camada.save(destino, "PNG")
+        return destino
 
     fonte_produto = _fonte(44)
     fonte_cta = _fonte(62)

@@ -115,6 +115,7 @@ def executar_pipeline(
     avisar("video", "Montando o vídeo vertical")
     caminho_video, origem_video = video.montar(
         mockup=caminho_mockup,
+        arte=caminho_arte,
         destino=destino / "post.mp4",
         gancho=pacote["gancho"],
         cta=pacote["cta"],

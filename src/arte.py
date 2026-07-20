@@ -269,6 +269,59 @@ def _gerar_vetor(
     )
 
 
+SVG_NS = "http://www.w3.org/2000/svg"
+
+
+def camadas_cumulativas(svg: str, passos: int = 10) -> list[str]:
+    """Divide o SVG em versões que revelam os elementos progressivamente.
+
+    Devolve `passos` documentos: o primeiro só com o fundo, o último completo.
+    É o que permite animar a arte se montando sozinha, sem IA de vídeo — o
+    desenho já vem em elementos separados e achatá-lo direto num PNG jogava
+    essa estrutura fora.
+
+    Falha aqui não é fatal: quem chama volta para o vídeo de quadro único.
+    """
+    ET.register_namespace("", SVG_NS)
+    raiz = ET.fromstring(svg)
+    filhos = list(raiz)
+    if len(filhos) < 3:
+        raise ValueError("SVG com elementos de menos para animar em camadas")
+
+    # O primeiro elemento costuma ser o retângulo de fundo: fica em todos os
+    # passos, senão a arte piscaria sobre transparência.
+    fundo, resto = filhos[:1], filhos[1:]
+    # No máximo um passo por elemento: pedir mais passos do que há elementos
+    # produziria quadros idênticos, e a animação travaria em vez de progredir.
+    passos = max(2, min(passos, len(resto)))
+
+    documentos: list[str] = []
+    for indice in range(passos):
+        fracao = (indice + 1) / passos
+        visiveis = fundo + resto[: max(1, round(len(resto) * fracao))]
+        copia = ET.Element(raiz.tag, dict(raiz.attrib))
+        copia.extend(visiveis)
+        documentos.append(ET.tostring(copia, encoding="unicode"))
+    return documentos
+
+
+def rasterizar_camadas(
+    svg_caminho: Path, destino_dir: Path, tamanho: tuple[int, int], passos: int = 10
+) -> list[Path]:
+    """Rasteriza cada passo cumulativo num PNG. Devolve os caminhos em ordem."""
+    documentos = camadas_cumulativas(
+        svg_caminho.read_text(encoding="utf-8"), passos=passos
+    )
+    destino_dir.mkdir(parents=True, exist_ok=True)
+    saidas: list[Path] = []
+    for indice, documento in enumerate(documentos):
+        alvo = destino_dir / f"camada_{indice:02d}.png"
+        _rasterizar(documento, alvo, tamanho)
+        saidas.append(alvo)
+    log.info("Arte separada em %d camadas para animação.", len(saidas))
+    return saidas
+
+
 def _conferir_svg(svg: str) -> None:
     """Recusa SVG malformado ou com elemento capaz de buscar recurso externo."""
     if "<svg" not in svg:
