@@ -69,48 +69,103 @@ class Publicador:
         return contas if isinstance(contas, list) else []
 
     def conta_tiktok(self, account_id: str | None = None) -> str:
-        """Resolve o accountId do TikTok, por parâmetro ou por descoberta."""
+        """Resolve o accountId do TikTok, por parâmetro ou por descoberta.
+
+        Contas com token morto (`needsReconnection`) ou desativadas são
+        ignoradas na descoberta — publicar nelas falharia mais adiante, com
+        uma mensagem bem menos clara.
+        """
         if account_id:
             return account_id
-        for conta in self.listar_contas():
-            if str(conta.get("platform", "")).lower() == "tiktok":
-                encontrado = conta.get("_id") or conta.get("id")
-                if encontrado:
-                    log.info("Conta TikTok descoberta: %s", encontrado)
-                    return str(encontrado)
+
+        tiktoks = [
+            c for c in self.listar_contas()
+            if str(c.get("platform", "")).lower() == "tiktok"
+        ]
+        saudaveis = [
+            c for c in tiktoks
+            if c.get("isActive", True) and not c.get("needsReconnection", False)
+        ]
+
+        for conta in saudaveis:
+            encontrado = conta.get("_id") or conta.get("id")
+            if encontrado:
+                log.info(
+                    "Conta TikTok descoberta: %s (@%s)",
+                    encontrado,
+                    conta.get("username", "?"),
+                )
+                return str(encontrado)
+
+        if tiktoks:
+            raise ErroPublicacao(
+                f"{len(tiktoks)} conta(s) TikTok encontrada(s), nenhuma utilizável "
+                "— token expirado ou conta desativada. Reconecte pelo painel do Zernio."
+            )
         raise ErroPublicacao(
             "Nenhuma conta TikTok conectada no Zernio. Conecte pelo painel e "
             "informe ZERNIO_TIKTOK_ACCOUNT_ID."
         )
 
-    def privacidades_permitidas(self, account_id: str) -> list[str]:
-        """Níveis de privacidade que a conta do criador aceita agora.
+    def info_criador(self, account_id: str) -> dict[str, Any]:
+        """Consulta o que a conta do criador aceita agora.
 
-        A doc da TikTok é explícita: usar um nível fora desta lista faz o post
-        falhar. Falha aqui não é fatal — devolvemos vazio e o chamador decide.
+        Devolve `{privacidades, pode_postar, duracao_maxima}`. A doc da TikTok
+        é explícita: usar um nível de privacidade fora da lista faz o post
+        falhar. Falha nesta consulta não é fatal — devolvemos vazio e o
+        chamador segue sem a checagem.
         """
+        vazio: dict[str, Any] = {
+            "privacidades": [],
+            "pode_postar": None,
+            "duracao_maxima": None,
+        }
         try:
             resposta = self._cliente.get(
                 f"/accounts/{account_id}/tiktok/creator-info",
                 params={"mediaType": "video"},
             )
+            if resposta.status_code == 429:
+                raise ErroPublicacao(
+                    "A conta atingiu o limite diário de publicações por API da "
+                    "TikTok. Aguarde a janela de 24h ou publique pelo aplicativo."
+                )
             self._conferir(resposta, "consultar creator-info")
             corpo = resposta.json()
+        except ErroPublicacao:
+            raise
         except Exception as erro:
             log.warning("creator-info indisponível (%s); seguindo sem checagem.", erro)
-            return []
+            return vazio
 
-        for chave in ("privacyLevels", "privacy_levels", "privacy_level_options"):
-            valor = corpo.get(chave)
-            if isinstance(valor, list) and valor:
-                return [str(item) for item in valor]
-        dados = corpo.get("data") or corpo.get("creatorInfo") or {}
-        if isinstance(dados, dict):
-            for chave in ("privacyLevels", "privacy_level_options"):
-                valor = dados.get(chave)
-                if isinstance(valor, list) and valor:
-                    return [str(item) for item in valor]
-        return []
+        return {
+            "privacidades": self._extrair_privacidades(corpo),
+            "pode_postar": (corpo.get("creator") or {}).get("canPostMore"),
+            "duracao_maxima": (corpo.get("postingLimits") or {}).get(
+                "maxVideoDurationSec"
+            ),
+        }
+
+    @staticmethod
+    def _extrair_privacidades(corpo: dict[str, Any]) -> list[str]:
+        """`privacyLevels` é uma lista de objetos `{value, label}`, não de strings.
+
+        Tratar cada item como string produziria `"{'value': 'PUBLIC_TO_EVERYONE',
+        ...}"`, a comparação nunca casaria e todo post seria rebaixado para um
+        nível inválido. Aceitamos as duas formas por segurança.
+        """
+        bruto = corpo.get("privacyLevels") or corpo.get("privacy_level_options") or []
+        if not isinstance(bruto, list):
+            return []
+        niveis: list[str] = []
+        for item in bruto:
+            if isinstance(item, dict):
+                valor = item.get("value") or item.get("privacy_level")
+                if valor:
+                    niveis.append(str(valor))
+            elif isinstance(item, str):
+                niveis.append(item)
+        return niveis
 
     # ------------------------------------------------------------------- mídia
 
@@ -161,8 +216,24 @@ class Publicador:
         tipo_conteudo_comercial: str = "brand_organic",
         rascunho: bool = False,
     ) -> dict[str, Any]:
-        """Cria o post. Em modo rascunho nada vai ao ar."""
-        permitidas = self.privacidades_permitidas(account_id)
+        """Cria o post.
+
+        `rascunho=True` envia para o **Creator Inbox da TikTok** — a mídia
+        percorre todo o caminho até a plataforma e o criador finaliza pelo
+        aplicativo. Não confundir com `isDraft` do Zernio, que guarda o post no
+        painel e nunca chega à TikTok; esse modo não exercitaria nada do que
+        importa testar. Internamente o Creator Inbox usa `post_mode:
+        MEDIA_UPLOAD`, contra o `DIRECT_POST` da publicação normal.
+        """
+        info = self.info_criador(account_id)
+        permitidas = info["privacidades"]
+
+        if info["pode_postar"] is False:
+            raise ErroPublicacao(
+                "A TikTok informa que esta conta não pode publicar mais agora "
+                "(limite diário por API). Aguarde a janela de 24h."
+            )
+
         if permitidas and privacidade not in permitidas:
             escolhida = permitidas[0]
             log.warning(
@@ -174,6 +245,13 @@ class Publicador:
             )
             privacidade = escolhida
 
+        # A TikTok recusa conteúdo de parceria paga com visibilidade privada.
+        if tipo_conteudo_comercial == "brand_content" and privacidade == "SELF_ONLY":
+            raise ErroPublicacao(
+                "A TikTok não aceita 'brand_content' com privacidade SELF_ONLY. "
+                "Use 'brand_organic' ou uma privacidade pública."
+            )
+
         ajustes: dict[str, Any] = {
             "privacy_level": privacidade,
             "allow_comment": permitir_comentario,
@@ -184,6 +262,8 @@ class Publicador:
             "express_consent_given": True,
             # Divulgação de conteúdo gerado por IA — política da plataforma.
             "video_made_with_ai": feito_com_ia,
+            # Sozinho já basta: 'brand_organic' implica isBrandOrganicPost, então
+            # não enviamos os booleanos separados.
             "commercialContentType": tipo_conteudo_comercial,
         }
         if rascunho:
@@ -194,8 +274,9 @@ class Publicador:
             "mediaItems": [{"type": "video", "url": url_video}],
             "platforms": [{"platform": "tiktok", "accountId": account_id}],
             "tiktokSettings": ajustes,
-            "publishNow": not rascunho,
-            "isDraft": rascunho,
+            # Sempre true: o post precisa sair do Zernio rumo à TikTok. O que
+            # decide se vai ao ar ou para o inbox é tiktokSettings.draft.
+            "publishNow": True,
         }
 
         resposta = self._cliente.post(
@@ -242,6 +323,9 @@ class Publicador:
             estado = str(ultimo.get("status", "")).lower()
             log.info("Status do post %s: %s (tentativa %d)", post_id, estado, tentativa)
 
+            # A doc lista seis estados: draft, scheduled, publishing, published,
+            # failed e partial. Só 'publishing' é transitório — tratar qualquer
+            # outro como "espere mais" faria o polling girar até estourar.
             if estado in {"published", "partial"}:
                 return {
                     "estado": estado,
@@ -251,6 +335,11 @@ class Publicador:
             if estado == "failed":
                 raise ErroPublicacao(
                     f"TikTok recusou a publicação: {self._motivo_falha(ultimo)}"
+                )
+            if estado in {"draft", "scheduled"}:
+                raise ErroPublicacao(
+                    f"O post ficou em '{estado}' em vez de ser enviado. Isso "
+                    "indica que publishNow não foi aceito — confira o payload."
                 )
             time.sleep(intervalo)
 

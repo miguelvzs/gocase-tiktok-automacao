@@ -305,6 +305,62 @@ def testar_integracoes() -> None:
         )
 
 
+def testar_parsers_do_publicador() -> None:
+    """Regressão dos formatos de resposta do Zernio.
+
+    Os dois primeiros casos cobrem bugs reais encontrados na revisão contra a
+    documentação. Ambos quebrariam toda publicação e nenhum apareceria em teste
+    que não olhasse o formato de resposta.
+    """
+    print("\nParsers de resposta do Zernio")
+    from src.publicador import Publicador
+
+    objetos = Publicador._extrair_privacidades(
+        {
+            "privacyLevels": [
+                {"value": "PUBLIC_TO_EVERYONE", "label": "Todos"},
+                {"value": "SELF_ONLY", "label": "Só eu"},
+            ]
+        }
+    )
+    checar(
+        "privacyLevels de objetos {value,label} vira lista de strings",
+        objetos == ["PUBLIC_TO_EVERYONE", "SELF_ONLY"],
+        str(objetos),
+    )
+    checar(
+        "privacyLevels em formato de string ainda é aceito",
+        Publicador._extrair_privacidades({"privacyLevels": ["SELF_ONLY"]}) == ["SELF_ONLY"],
+    )
+    checar(
+        "creator-info sem privacyLevels devolve lista vazia, não quebra",
+        Publicador._extrair_privacidades({}) == [],
+    )
+
+    url_por_plataforma = Publicador._extrair_url(
+        {"platforms": [{"platform": "tiktok", "platformPostUrl": "https://tiktok.com/x"}]}
+    )
+    checar(
+        "platformPostUrl é lido de dentro de platforms[]",
+        url_por_plataforma == "https://tiktok.com/x",
+    )
+    checar(
+        "platformPostUrl no topo também é aceito",
+        Publicador._extrair_url({"platformPostUrl": "https://tiktok.com/y"})
+        == "https://tiktok.com/y",
+    )
+    checar(
+        "post sem URL devolve None em vez de estourar",
+        Publicador._extrair_url({"platforms": [{"platform": "tiktok"}]}) is None,
+    )
+    checar(
+        "motivo da falha é extraído de dentro de platforms[]",
+        "cota" in Publicador._motivo_falha(
+            {"platforms": [{"platform": "tiktok", "error": "cota diária excedida"}]}
+        ),
+    )
+
+
 def testar_credenciais_ausentes() -> None:
     print("\nComportamento sem credencial")
     from src.publicador import ErroPublicacao, Publicador
@@ -338,6 +394,7 @@ def main() -> int:
         testar_guardrails,
         testar_midia,
         testar_integracoes,
+        testar_parsers_do_publicador,
         testar_credenciais_ausentes,
     ):
         try:

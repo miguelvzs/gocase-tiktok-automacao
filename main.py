@@ -27,7 +27,10 @@ def main() -> int:
     analisador.add_argument(
         "--publicar",
         action="store_true",
-        help="Publica de verdade. Sem esta flag, gera tudo e envia como rascunho.",
+        help=(
+            "Publica direto no perfil. Sem esta flag, envia para o Creator "
+            "Inbox da TikTok — atravessa a integração inteira sem ficar público."
+        ),
     )
     analisador.add_argument("--json", action="store_true", help="Imprime o relatório em JSON")
     args = analisador.parse_args()

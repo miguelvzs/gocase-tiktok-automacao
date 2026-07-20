@@ -142,7 +142,10 @@ def executar_pipeline(
         url_video = publicador.subir_midia(caminho_video)
         relatorio["url_midia"] = url_video
 
-        avisar("publicacao", "Rascunho no TikTok" if rascunho else "Publicando no TikTok")
+        avisar(
+            "publicacao",
+            "Enviando ao Creator Inbox" if rascunho else "Publicando no TikTok",
+        )
         criado = publicador.publicar(
             account_id=conta,
             legenda=legenda,
@@ -157,8 +160,12 @@ def executar_pipeline(
         )
         relatorio["post_id"] = criado["post_id"]
         relatorio["url_publica"] = criado["url_publica"]
+        relatorio["destino"] = "creator_inbox" if rascunho else "publicado"
 
-        if not rascunho and criado["post_id"]:
+        # Confirmamos o status nos dois modos: mesmo o envio ao Creator Inbox
+        # atravessa a TikTok inteira e pode falhar. Só o `estado` final diz se
+        # a mídia chegou.
+        if criado["post_id"]:
             avisar("status", "Aguardando confirmação da TikTok")
             try:
                 final = publicador.aguardar_publicacao(
@@ -173,7 +180,7 @@ def executar_pipeline(
                 relatorio["estado"] = "indeterminado"
                 relatorio["aviso"] = str(erro)
         else:
-            relatorio["estado"] = "rascunho" if rascunho else "criado"
+            relatorio["estado"] = "criado"
 
     relatorio["segundos"] = round(time.monotonic() - inicio, 1)
     avisar("fim", _resumo(relatorio))

@@ -39,8 +39,9 @@ services:
         sync: false
 
       # --- Operação ---
-      # true  = gera tudo e envia como rascunho, sem publicar.
-      # false = publica de verdade.
-      # O padrão seguro é o rascunho: publicar exige uma mudança explícita.
+      # true  = envia para o Creator Inbox da TikTok — atravessa a integração
+      #         inteira sem nada ficar público.
+      # false = publica direto no perfil.
+      # O padrão seguro é o inbox: publicar exige uma mudança explícita.
       - key: MODO_RASCUNHO
         value: "true"

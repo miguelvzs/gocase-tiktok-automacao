@@ -55,8 +55,9 @@ class PedidoPublicacao(BaseModel):
     rascunho: bool | None = Field(
         default=None,
         description=(
-            "true gera tudo sem publicar. Ausente, usa a variável de ambiente "
-            "MODO_RASCUNHO (padrão: true)."
+            "true envia para o Creator Inbox da TikTok em vez de publicar — a "
+            "mídia chega à plataforma, mas nada fica público. Ausente, usa a "
+            "variável de ambiente MODO_RASCUNHO (padrão: true)."
         ),
     )
 

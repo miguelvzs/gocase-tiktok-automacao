@@ -34,7 +34,7 @@ Os outros campos do nó *Configuração*:
 |---|---|
 | `sinal_id` | Vazio: o sistema escolhe uma tendência ainda não usada. Preenchido: fixa a tendência. |
 | `sku` | Vazio: o sistema escolhe o produto. Preenchido: fixa o produto. |
-| `publicar` | `false` gera tudo e envia como rascunho. `true` vai ao ar. |
+| `publicar` | `false` envia para o Creator Inbox da TikTok — a mídia atravessa a integração inteira sem nada ficar público. `true` vai ao ar no perfil. |
 
 O gatilho agendado vem desabilitado de propósito. A TikTok impõe um limite
 diário de posts por API, por conta — ligar o agendamento sem calibrar a
@@ -132,11 +132,21 @@ Saúde do serviço e número de jobs ativos.
 
 | Estado | Significado |
 |---|---|
-| `rascunho` | Gerado e enviado ao Zernio sem publicar. |
-| `criado` | Post criado, publicação ainda não confirmada. |
-| `published` | Confirmado no ar pela TikTok. |
+| `published` | A TikTok confirmou o recebimento. Combine com `destino` para saber onde foi parar. |
 | `partial` | A TikTok aceitou parcialmente — confira o post. |
+| `criado` | Post criado no Zernio, sem `post_id` para acompanhar. |
 | `indeterminado` | O post existe, mas o status não concluiu no tempo do polling. **Não republique** — confira o painel do Zernio antes, para não duplicar. |
+
+E `relatorio.destino` diz o alvo pretendido:
+
+| Destino | Significado |
+|---|---|
+| `creator_inbox` | Foi para a caixa de entrada do criador na TikTok. O vídeo está na plataforma; alguém finaliza pelo aplicativo. |
+| `publicado` | Foi direto para o perfil, público. |
+
+A distinção importa porque os dois modos usam caminhos diferentes da API da
+TikTok — `post_mode: MEDIA_UPLOAD` para o inbox, `DIRECT_POST` para o perfil —
+e escopos OAuth diferentes (`video.upload` contra `video.publish`).
 
 ---
 

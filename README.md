@@ -122,6 +122,9 @@ produção. Nenhum foi descoberto quebrando.
 | Upload direto recusa acima de 25 MB | Verificação antes do envio e recompressão automática |
 | Google Drive e Dropbox devolvem HTML, não vídeo | A mídia é hospedada pelo próprio transporte |
 | Vídeo sem faixa de áudio processa de forma menos confiável | Faixa silenciosa injetada quando a origem não tem áudio |
+| Conta pode estar no limite diário sem que a publicação avise | `canPostMore` é consultado antes; 429 vira mensagem legível |
+| Conta conectada mas com token morto falha tarde e mal | Contas com `needsReconnection` são descartadas na descoberta |
+| Conteúdo de parceria paga é recusado com visibilidade privada | Combinação `brand_content` + `SELF_ONLY` é barrada antes do envio |
 
 ---
 
@@ -223,18 +226,32 @@ variáveis de ambiente. O contrato está em [`.env.example`](.env.example).
 
 ## Qualidade
 
-`testar.py` executa **28 verificações** sem exigir credencial: carga e
+`testar.py` executa **35 verificações** sem exigir credencial: carga e
 degradação da configuração, rotação de tendências, os guardrails de marca caso a
 caso, o pipeline de mídia completo com conferência da especificação real do
 vídeo (H.264, yuv420p, 1080×1920, faixa de áudio, duração e tamanho), a
 integridade do workflow n8n (conexões e referências resolvem, sem credencial e
-sem caminho de disco) e o comportamento das superfícies quando falta chave.
+sem caminho de disco), o parsing das respostas da API de publicação e o
+comportamento das superfícies quando falta chave.
 
-Três defeitos reais foram encontrados por esses testes durante a construção: a
-paleta da arte de reserva escapando da identidade da marca, contraste
-insuficiente fazendo a última linha do texto sumir sobre o produto, e dois furos
-nos guardrails — superlativo sem acento e um limite de palavra que impedia
-`eleic` de casar com `eleição`.
+Defeitos reais encontrados durante a construção e cobertos por regressão:
+
+| Defeito | Como apareceu |
+|---|---|
+| Paleta da arte de reserva escapando da identidade da marca | Inspeção visual do material gerado |
+| Contraste insuficiente: a última linha do texto sumia sobre o produto | Inspeção visual de um quadro do vídeo |
+| Guardrail cego a superlativo sem acento | Teste caso a caso |
+| Guardrail com limite de palavra impedindo `eleic` de casar com `eleição` | Teste caso a caso |
+| Níveis de privacidade lidos como texto quando a API devolve objetos | Revisão linha a linha contra a documentação |
+| Dois conceitos distintos de "rascunho" tratados como um só | Revisão linha a linha contra a documentação |
+
+Os dois últimos merecem nota porque nenhum apareceria em teste que não olhasse o
+formato de resposta. O primeiro rebaixaria toda publicação para um nível de
+privacidade inválido. O segundo é mais sutil: o serviço de transporte tem um
+rascunho próprio, que guarda o post no painel dele e **nunca chega à TikTok** —
+enquanto a TikTok tem o Creator Inbox, que recebe a mídia de verdade. Tratar os
+dois como sinônimos faria o modo de teste não exercitar justamente o caminho que
+precisava ser testado.
 
 Outras salvaguardas embutidas: geração de arte determinística (o mesmo conceito
 produz o mesmo arquivo, o que torna uma execução reproduzível); jobs expiram
