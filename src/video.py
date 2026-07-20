@@ -144,6 +144,9 @@ def montar(
         filtro_base = f"[0:v]{_ken_burns(largura, altura, fps, duracao, zoom)}[bg];"
         log.info("Animação local (Ken Burns, zoom %.2f) no mesmo passe.", zoom)
 
+    if logo is not None:
+        logo = _recortar_margem(logo, trabalho / "logo_recortado.png")
+
     sobreposicao = trabalho / "legenda.png"
     _desenhar_legenda(
         destino=sobreposicao,
@@ -176,6 +179,29 @@ def montar(
         origem,
     )
     return destino, origem
+
+
+def _recortar_margem(logo: Path, destino: Path) -> Path:
+    """Remove a moldura transparente em volta do logotipo.
+
+    Arquivos de marca costumam vir num quadrado com muita margem vazia — o que
+    recebemos era 1080x1080 com 96% de transparência. Escalar isso pela largura
+    da imagem deixaria o wordmark minúsculo, porque a maior parte da largura é
+    vazio. O recorte pela caixa do conteúdo faz a escala valer para a marca, não
+    para a moldura.
+    """
+    with Image.open(logo) as imagem:
+        rgba = imagem.convert("RGBA")
+        caixa = rgba.getchannel("A").getbbox()
+        if caixa is None:
+            return logo
+        recortado = rgba.crop(caixa)
+    destino.parent.mkdir(parents=True, exist_ok=True)
+    recortado.save(destino, "PNG")
+    log.info(
+        "Logotipo recortado de %s para %s.", rgba.size, recortado.size
+    )
+    return destino
 
 
 def _prompt_padrao(produto: str) -> str:
