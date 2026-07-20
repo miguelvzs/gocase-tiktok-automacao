@@ -50,6 +50,18 @@ publicação no TikTok + confirmação de status
 relatório da execução
 ```
 
+O vídeo não é um quadro parado com zoom. A arte é gerada em vetor, com os
+elementos separados, então a montagem dela vira a própria narrativa:
+
+```
+0,0 – 2,4 s   a arte se desenha, elemento por elemento
+2,4 – 3,2 s   a arte vira produto
+3,2 – 8,0 s   a capinha, com aproximação lenta
+```
+
+Isso importa porque um quadro estático com zoom é linguagem de banco de
+imagens, não de TikTok — e a plataforma premia corte e movimento.
+
 O operador abre o fluxo no n8n e clica em executar. Ou habilita o gatilho
 agendado e não abre mais.
 
@@ -62,12 +74,16 @@ etapa:
 
 | Métrica | Valor |
 |---|---|
-| Tempo total, do sinal à confirmação | **54 s** |
+| Tempo total, do sinal à confirmação | 54 s local · **235 s** no serviço publicado |
 | Custo por execução | ~US$ 0,04 |
-| Vídeo entregue | 1080×1920, H.264 yuv420p, 30 fps, faixa AAC, 7,97 s |
-| Tamanho | 0,99 MB |
+| Vídeo entregue | 1080×1920, H.264 yuv420p, 30 fps, faixa AAC, 8,00 s |
+| Tamanho | ~1 MB, contra um teto de 25 MB |
 | Estado final | `published` |
 | Intervenção humana | nenhuma |
+
+A diferença de tempo entre a máquina local e o serviço publicado é o
+processador do plano gratuito: a codificação do vídeo domina, e lá ela é cerca
+de quatro vezes mais lenta.
 
 O material produzido: tendência *cultura gamer, paleta neon e cyber* → produto
 *Capinha iPhone 15 Pro* → gancho *"POV: sua capinha virou setup gamer"* → arte
@@ -99,10 +115,13 @@ devolve um celular genérico, com arte aproximada e texto ilegível. Modelos de
 vídeo não renderizam produto específico com fidelidade — e, mais importante,
 **um clipe de vídeo não é imprimível.**
 
-O que a GoCase vende é a arte. Então a arte é o que a IA gera, num arquivo
-quadrado na resolução da área de impressão. A composição no produto é feita por
-código, o que garante que a capinha do vídeo é exatamente a capinha que a
-fábrica produziria. A IA só entra de novo para dar movimento ao mockup pronto.
+O que a GoCase vende é a arte. Então a arte é o que a IA gera, na proporção real
+da área de impressão do produto — alta, cerca de 1:2, não quadrada. A composição
+no produto é feita por código, o que garante que a capinha do vídeo é exatamente
+a capinha que a fábrica produziria.
+
+O movimento vem depois, e na maior parte das execuções nem precisa de IA: como a
+arte é vetorial, a própria montagem dela vira animação.
 
 O resultado é que **cada execução produz um ativo de negócio reutilizável**, não
 só um post descartável.
@@ -154,8 +173,9 @@ Os campos de conformidade não são opcionais e estão no código:
 
 ## Armadilhas de plataforma tratadas no código
 
-Cada item aqui é documentado pelo fornecedor como causa real de falha em
-produção. Nenhum foi descoberto quebrando.
+Quase todos os itens abaixo vieram da documentação do fornecedor, antes de
+quebrarem. A exceção está marcada — e é justamente a que nenhuma leitura teria
+encontrado.
 
 | Armadilha | Tratamento |
 |---|---|
@@ -169,7 +189,7 @@ produção. Nenhum foi descoberto quebrando.
 | Conta pode estar no limite diário sem que a publicação avise | `canPostMore` é consultado antes; 429 vira mensagem legível |
 | Conta conectada mas com token morto falha tarde e mal | Contas com `needsReconnection` são descartadas na descoberta |
 | Conteúdo de parceria paga é recusado com visibilidade privada | Combinação `brand_content` + `SELF_ONLY` é barrada antes do envio |
-| Máximo de 5 rascunhos pendentes por conta em 24h — e `creator-info` reporta `canPostMore: true` mesmo com a fila cheia | Erro é traduzido em instrução: finalize rascunhos no aplicativo ou publique direto |
+| **Descoberta em produção:** máximo de 5 rascunhos pendentes por conta em 24h — e `creator-info` reporta `canPostMore: true` mesmo com a fila cheia, porque mede a cota de publicação e não a de rascunhos | Erro é traduzido em instrução: finalize rascunhos no aplicativo ou publique direto |
 
 ---
 
@@ -207,8 +227,17 @@ A arte tem três caminhos, tentados em ordem:
 | 2 | Vetor desenhado pela IA de texto | acerta o tema; SVG escala sem perda e separa cores | `vetor_ia` |
 | 3 | Composição geométrica local | sempre disponível, na paleta da marca | `local` |
 
-O vídeo tem dois: animação por IA sobre o mockup, ou Ken Burns em FFmpeg sobre
-o mesmo mockup.
+O vídeo também tem três, e a ordem não é a mesma da arte:
+
+| # | Caminho | O que entrega | `etapas.video` |
+|---|---|---|---|
+| 1 | Animação por IA sobre o mockup | movimento de câmera realista | `ia` |
+| 2 | Montagem em cenas a partir das camadas do vetor | narrativa: arte se monta, vira produto | `cenas` |
+| 3 | Ken Burns em FFmpeg sobre o mockup | aproximação lenta, sempre disponível | `local` |
+
+O caminho 2 só existe porque a arte veio em vetor. Achatar o SVG num PNG
+descartaria a estrutura em elementos — que é exatamente o que permite animar a
+montagem sem IA de vídeo, sem chave e sem cota.
 
 **Isto não é hipótese — foi exercitado.** O plano gratuito do provedor de
 imagem concede `limit: 0` para geração de imagem e de vídeo; a cota exige
@@ -254,7 +283,7 @@ hibernar no meio da execução.
 
 ### Tecnologias
 
-Python 3.12+ · Pillow (composição) · svglib, reportlab e pypdfium2
+Python 3.12+ · Pillow (composição e animação por quadros) · svglib, reportlab e pypdfium2
 (rasterização vetorial) · FFmpeg via `imageio-ffmpeg` · FastAPI e uvicorn (API
 HTTP) · PyYAML (configuração externa) · Anthropic Claude (redação e arte
 vetorial, ambas com schema imposto) · Google Gemini (imagem e vídeo, opcional) ·
@@ -296,7 +325,7 @@ variáveis de ambiente. O contrato está em [`.env.example`](.env.example).
 
 ## Qualidade
 
-`testar.py` executa **35 verificações** sem exigir credencial: carga e
+`testar.py` executa **41 verificações** sem exigir credencial: carga e
 degradação da configuração, rotação de tendências, os guardrails de marca caso a
 caso, o pipeline de mídia completo com conferência da especificação real do
 vídeo (H.264, yuv420p, 1080×1920, faixa de áudio, duração e tamanho), a
@@ -314,14 +343,28 @@ Defeitos reais encontrados durante a construção e cobertos por regressão:
 | Guardrail com limite de palavra impedindo `eleic` de casar com `eleição` | Teste caso a caso |
 | Níveis de privacidade lidos como texto quando a API devolve objetos | Revisão linha a linha contra a documentação |
 | Dois conceitos distintos de "rascunho" tratados como um só | Revisão linha a linha contra a documentação |
+| Sombra da arte desenhada como retângulo sólido, lendo como moldura preta | Inspeção do vídeo montado |
+| Produto e CTA escritos sobre a arte na cena de abertura | Inspeção do vídeo montado |
+| Limite de 5 rascunhos pendentes por conta em 24h, não tratado | **Execução real repetida**, com a conta acumulando histórico |
 
-Os dois últimos merecem nota porque nenhum apareceria em teste que não olhasse o
-formato de resposta. O primeiro rebaixaria toda publicação para um nível de
-privacidade inválido. O segundo é mais sutil: o serviço de transporte tem um
-rascunho próprio, que guarda o post no painel dele e **nunca chega à TikTok** —
-enquanto a TikTok tem o Creator Inbox, que recebe a mídia de verdade. Tratar os
-dois como sinônimos faria o modo de teste não exercitar justamente o caminho que
-precisava ser testado.
+Dois merecem nota porque nenhum apareceria em teste que não olhasse o formato de
+resposta. O de privacidade rebaixaria toda publicação para um valor inválido. O
+de rascunho é mais sutil: o serviço de transporte tem um rascunho próprio, que
+guarda o post no painel dele e **nunca chega à TikTok** — enquanto a TikTok tem
+o Creator Inbox, que recebe a mídia de verdade. Tratar os dois como sinônimos
+faria o modo de teste não exercitar justamente o caminho que precisava ser
+testado.
+
+O último é de outra natureza, e é o mais instrutivo. Nenhuma leitura de
+documentação e nenhum teste sintético o encontraria: o limite depende do
+histórico da conta nas últimas 24 horas, então só aparece depois de várias
+execuções reais e acumuladas. Pior, ele é invisível antes do envio — a consulta
+de capacidade do criador reporta que a conta pode postar, porque mede a cota de
+publicação e não a de rascunhos.
+
+Vale como registro de método: revisão de documentação pega uma classe de erro,
+inspeção visual pega outra, e uso repetido em condição real pega uma terceira
+que as duas primeiras não alcançam.
 
 Outras salvaguardas embutidas: geração de arte determinística (o mesmo conceito
 produz o mesmo arquivo, o que torna uma execução reproduzível); jobs expiram
