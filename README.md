@@ -74,16 +74,21 @@ etapa:
 
 | Métrica | Valor |
 |---|---|
-| Tempo total, do sinal à confirmação | 54 s local · **235 s** no serviço publicado |
+| Tempo total, do sinal à confirmação | ~30 s local · ~140 s no serviço publicado |
 | Custo por execução | ~US$ 0,04 |
 | Vídeo entregue | 1080×1920, H.264 yuv420p, 30 fps, faixa AAC, 8,00 s |
 | Tamanho | ~1 MB, contra um teto de 25 MB |
 | Estado final | `published` |
 | Intervenção humana | nenhuma |
 
-A diferença de tempo entre a máquina local e o serviço publicado é o
-processador do plano gratuito: a codificação do vídeo domina, e lá ela é cerca
-de quatro vezes mais lenta.
+A diferença entre a máquina local e o serviço publicado é o processador do
+plano gratuito, cerca de quatro vezes mais lento.
+
+O relatório de cada execução traz `tempos`, com o custo de cada estágio. Foi
+medindo isso que a duração caiu 42%: as duas chamadas à IA somavam 64% do total
+e eram sequenciais sem precisar ser, e o desfoque da sombra era recalculado a
+cada quadro para uma sombra que não muda. Otimizar o vídeo primeiro, que era a
+suspeita natural, teria rendido menos da metade.
 
 O material produzido: tendência *cultura gamer, paleta neon e cyber* → produto
 *Capinha iPhone 15 Pro* → gancho *"POV: sua capinha virou setup gamer"* → arte

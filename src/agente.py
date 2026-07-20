@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import logging
 import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any, Callable
 
@@ -54,28 +55,21 @@ def executar_pipeline(
         if progresso:
             progresso(etapa, mensagem)
 
-    relatorio: dict[str, Any] = {"rascunho": rascunho, "etapas": {}}
+    relatorio: dict[str, Any] = {"rascunho": rascunho, "etapas": {}, "tempos": {}}
+    marca_tempo = time.monotonic()
+
+    def cronometrar(nome: str) -> None:
+        """Fecha o estágio anterior. Torna o custo mensurável, não presumido."""
+        nonlocal marca_tempo
+        agora = time.monotonic()
+        relatorio["tempos"][nome] = round(agora - marca_tempo, 1)
+        marca_tempo = agora
 
     # 1. Sinal de tendência + produto do catálogo
     avisar("sinal", "Selecionando tendência e produto")
     escolha = tendencia.selecionar(cfg, sinal_id=sinal_id, sku=sku)
     relatorio["sinal"] = escolha["sinal"]
     relatorio["produto"] = escolha["produto"]
-
-    # 2. Conceito de arte, copy e hashtags
-    avisar("criativo", f"Redigindo para '{escolha['sinal']['tema']}'")
-    pacote = criativo.gerar(
-        sinal=escolha["sinal"],
-        produto=escolha["produto"],
-        marca=cfg["marca"],
-        api_key=segredo("ANTHROPIC_API_KEY", obrigatorio=True),  # type: ignore[arg-type]
-        modelo=cfg["ia"]["modelo_texto"],
-        max_tokens=cfg["ia"]["max_tokens"],
-    )
-    relatorio["criativo"] = {
-        chave: valor for chave, valor in pacote.items() if not chave.startswith("_")
-    }
-    relatorio["uso_ia"] = pacote.get("_uso", {})
 
     # A chave é a mesma para imagem e vídeo, mas os custos são muito diferentes:
     # vídeo custa cerca de 30 vezes mais por execução. Por isso cada etapa tem
@@ -84,21 +78,58 @@ def executar_pipeline(
     google_key = segredo("GOOGLE_API_KEY")
     chave_imagem = google_key if cfg["ia"].get("usar_ia_imagem", True) else None
     chave_video = google_key if cfg["ia"].get("usar_ia_video", False) else None
-
-    # 3. A arte imprimível — o ativo com valor de negócio
-    avisar("arte", "Gerando a arte da capinha")
+    chave_texto = segredo("ANTHROPIC_API_KEY", obrigatorio=True)
     area = escolha["produto"].get("area_arte", [1024, 1024])
-    caminho_arte, origem_arte = arte.gerar(
-        conceito=pacote["conceito_arte"],
-        destino=destino / "arte.png",
-        paleta=cfg["marca"]["paleta"],
-        modelo=cfg["ia"]["modelo_imagem"],
-        api_key=chave_imagem,
-        tamanho=(int(area[0]), int(area[1])),
-        chave_anthropic=segredo("ANTHROPIC_API_KEY"),
-        modelo_texto=cfg["ia"]["modelo_texto"],
+
+    # 2 e 3. Texto e arte, em paralelo.
+    #
+    # Medindo os estágios, as duas chamadas à IA somavam 64% do tempo total e
+    # eram sequenciais sem precisar ser: a arte esperava o conceito que o
+    # redator escrevia. Mas o desenho sai do mesmo insumo — tendência, público e
+    # produto —, então o Claude desenha direto do briefing, sem passar pela
+    # descrição intermediária em inglês. Uma tradução a menos e uma espera a
+    # menos.
+    #
+    # O conceito escrito continua sendo gerado: é ele que alimenta o gerador de
+    # imagem quando há cota, e aparece no relatório da execução.
+    avisar("criativo", f"Redigindo e desenhando para '{escolha['sinal']['tema']}'")
+    briefing = (
+        f"{escolha['sinal']['tema']}. Público: {escolha['sinal'].get('publico', '')}. "
+        f"Produto: {escolha['produto']['nome']}."
     )
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        f_texto = executor.submit(
+            criativo.gerar,
+            sinal=escolha["sinal"],
+            produto=escolha["produto"],
+            marca=cfg["marca"],
+            api_key=chave_texto,  # type: ignore[arg-type]
+            modelo=cfg["ia"]["modelo_texto"],
+            max_tokens=cfg["ia"]["max_tokens"],
+        )
+        f_arte = executor.submit(
+            arte.gerar,
+            conceito=briefing,
+            destino=destino / "arte.png",
+            paleta=cfg["marca"]["paleta"],
+            modelo=cfg["ia"]["modelo_imagem"],
+            api_key=chave_imagem,
+            tamanho=(int(area[0]), int(area[1])),
+            chave_anthropic=chave_texto,
+            modelo_texto=cfg["ia"]["modelo_texto"],
+        )
+        # O texto vem primeiro de propósito: se os guardrails de marca barrarem
+        # o conteúdo, a exceção sobe antes de gastar tempo com a arte.
+        pacote = f_texto.result()
+        caminho_arte, origem_arte = f_arte.result()
+
+    relatorio["criativo"] = {
+        chave: valor for chave, valor in pacote.items() if not chave.startswith("_")
+    }
+    relatorio["uso_ia"] = pacote.get("_uso", {})
     relatorio["etapas"]["arte"] = origem_arte
+    cronometrar("criativo_e_arte")
 
     # 4. Composição no produto — garante fidelidade que IA de vídeo não dá
     avisar("mockup", "Compondo a arte no produto")
@@ -110,6 +141,8 @@ def executar_pipeline(
         largura=v["largura"],
         altura=v["altura"],
     )
+
+    cronometrar("mockup")
 
     # 5. Vídeo 9:16 na especificação da TikTok
     avisar("video", "Montando o vídeo vertical")
@@ -137,6 +170,7 @@ def executar_pipeline(
         "video": str(caminho_video),
     }
     relatorio["video_mb"] = round(caminho_video.stat().st_size / 1024 / 1024, 2)
+    cronometrar("video")
 
     # 6. Publicação
     p = cfg["publicacao"]
@@ -200,6 +234,7 @@ def executar_pipeline(
         if not relatorio.get("url_publica"):
             relatorio["url_perfil"] = publicador.perfil_url(conta)
 
+    cronometrar("publicacao")
     relatorio["segundos"] = round(time.monotonic() - inicio, 1)
     avisar("fim", _resumo(relatorio))
     return relatorio

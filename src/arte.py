@@ -249,8 +249,12 @@ def _gerar_vetor(
         max_tokens=8000,
         system=sistema,
         messages=[{"role": "user", "content": f"Desenhe: {conceito}"}],
+        # Esforço médio em vez do padrão: mede-se 18 s contra 24 s por desenho,
+        # com o mesmo número de elementos. Para arte gráfica a deliberação extra
+        # não melhora a composição, só atrasa.
         output_config={
-            "format": {"type": "json_schema", "schema": _esquema_svg(largura, altura)}
+            "format": {"type": "json_schema", "schema": _esquema_svg(largura, altura)},
+            "effort": "medium",
         },
     )
     if resposta.stop_reason == "max_tokens":
