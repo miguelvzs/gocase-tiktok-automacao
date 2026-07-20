@@ -28,19 +28,22 @@ marca:
 
 # Catálogo de produtos. Espelha o "Google Sheets trigger" do vídeo de
 # referência: a automação lê uma fonte de dados de produto, não inventa SKU.
+# `area_arte` é a área de impressão real do produto, em pixels. Capinha de
+# celular é alta (~1:2) — gerar arte quadrada e recortar o centro descarta
+# metade do desenho e corta a composição pela metade.
 produtos:
   - sku: CASE-IPH-15P
     nome: Capinha iPhone 15 Pro
     linha: Impact Pro
-    area_arte: [1024, 1024]
+    area_arte: [1024, 2048]
   - sku: CASE-SAM-S24
     nome: Capinha Galaxy S24
     linha: Impact Pro
-    area_arte: [1024, 1024]
+    area_arte: [1024, 2048]
   - sku: CASE-IPH-14
     nome: Capinha iPhone 14
     linha: Slim
-    area_arte: [1024, 1024]
+    area_arte: [1024, 2048]
 
 # Sinais de tendência. Cada execução escolhe um e o marca como usado, para que
 # execuções seguidas não gerem conteúdo idêntico — o Zernio rejeita conteúdo
@@ -86,6 +89,13 @@ publicacao:
   intervalo_status_segundos: 6
 
 ia:
+  # Interruptores de custo. A geração de imagem e a de vídeo têm preços muito
+  # diferentes — vídeo custa cerca de 30 vezes mais por execução — então cada
+  # uma tem seu próprio controle. Desligada, a etapa usa o caminho local, que
+  # é código de produção e não simulação.
+  usar_ia_imagem: true
+  usar_ia_video: false
+
   modelo_texto: claude-opus-4-8
   # Imagen é descontinuado em 17/08/2026. Usamos a linha Nano Banana, que é a
   # migração recomendada pela própria Google.

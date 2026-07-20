@@ -53,16 +53,20 @@ etapa:
 
 | Métrica | Valor |
 |---|---|
-| Tempo total, do sinal à confirmação | **28,7 s** |
-| Tokens de saída da IA de texto | 358 |
+| Tempo total, do sinal à confirmação | **54 s** |
+| Custo por execução | ~US$ 0,04 |
 | Vídeo entregue | 1080×1920, H.264 yuv420p, 30 fps, faixa AAC, 7,97 s |
-| Tamanho | 0,74 MB |
+| Tamanho | 0,99 MB |
 | Estado final | `published` |
 | Intervenção humana | nenhuma |
 
-O material produzido: tendência *ilustração botânica minimalista* → produto
-*Capinha iPhone 14* → gancho *"Capinha que combina com sua mesa de trabalho"* →
-arte, mockup, vídeo vertical e post entregue.
+O material produzido: tendência *cultura gamer, paleta neon e cyber* → produto
+*Capinha iPhone 15 Pro* → gancho *"POV: sua capinha virou setup gamer"* → arte
+vetorial, mockup, vídeo vertical e post entregue.
+
+Execuções anteriores cobriram outras tendências do catálogo — *festa junina*
+produziu bandeirinhas, balões e fogueira; *ilustração botânica* produziu folhas
+de monstera e samambaia. A arte acompanha o tema, não é decoração fixa.
 
 A confirmação não veio do log do próprio sistema, e sim da TikTok: o aplicativo
 notificou a conta com *"Seu conteúdo está pronto — Edite seu vídeo antes de
@@ -185,17 +189,29 @@ mais comum de quebrar pipeline em produção.
 
 O pipeline nunca trava por indisponibilidade de IA de mídia.
 
-| Estágio | Caminho principal | Reserva |
-|---|---|---|
-| Arte | modelo de imagem | composição geométrica na paleta da marca, derivada do conceito |
-| Vídeo | animação por IA a partir do mockup | Ken Burns em FFmpeg sobre o mesmo mockup |
+A arte tem três caminhos, tentados em ordem:
 
-O caminho de reserva é código de produção, não simulação — e o relatório de
-cada execução informa qual foi usado (`etapas.arte`, `etapas.video`). Cota
-esgotada, chave ausente ou API instável não interrompem a operação; apenas
-mudam a qualidade do movimento, com registro.
+| # | Caminho | O que entrega | `etapas.arte` |
+|---|---|---|---|
+| 1 | Gerador de imagem | maior alcance visual: textura, pintura, grão | `imagem_ia` |
+| 2 | Vetor desenhado pela IA de texto | acerta o tema; SVG escala sem perda e separa cores | `vetor_ia` |
+| 3 | Composição geométrica local | sempre disponível, na paleta da marca | `local` |
 
-Como efeito colateral, **a suíte de testes roda sem nenhuma credencial**.
+O vídeo tem dois: animação por IA sobre o mockup, ou Ken Burns em FFmpeg sobre
+o mesmo mockup.
+
+**Isto não é hipótese — foi exercitado.** O plano gratuito do provedor de
+imagem concede `limit: 0` para geração de imagem e de vídeo; a cota exige
+faturamento com aporte mínimo. O pipeline caiu para o caminho 2 sozinho, e o
+resultado da seção anterior é justamente esse caminho. A automação entregou sem
+intervenção, e o relatório registrou qual rota usou.
+
+Vetor, aliás, é o formato mais adequado à produção sob demanda: escala para
+qualquer tamanho de capinha sem perder qualidade e separa cores para impressão.
+O `.svg` fica salvo ao lado do `.png` — é o arquivo que a fábrica usaria.
+
+Como efeito colateral do desenho, **a suíte de testes roda sem nenhuma
+credencial**.
 
 ---
 
@@ -228,11 +244,24 @@ hibernar no meio da execução.
 
 ### Tecnologias
 
-Python 3.12+ · Pillow (arte e composição) · FFmpeg via `imageio-ffmpeg`
-(binário embutido, sem instalação de sistema) · FastAPI e uvicorn (API HTTP) ·
-PyYAML (configuração externa) · Anthropic Claude (redação com schema imposto) ·
-Google Gemini (imagem e vídeo, opcional) · Zernio (transporte de publicação) ·
-n8n (orquestração low-code) · Render (hospedagem).
+Python 3.12+ · Pillow (composição) · svglib, reportlab e pypdfium2
+(rasterização vetorial) · FFmpeg via `imageio-ffmpeg` · FastAPI e uvicorn (API
+HTTP) · PyYAML (configuração externa) · Anthropic Claude (redação e arte
+vetorial, ambas com schema imposto) · Google Gemini (imagem e vídeo, opcional) ·
+Zernio (transporte de publicação) · n8n (orquestração low-code) · Render
+(hospedagem).
+
+Nenhuma dependência de biblioteca do sistema. FFmpeg e o rasterizador de PDF
+vêm como binário dentro do pacote pip — decisão tomada para que o projeto suba
+num runtime onde não existe `apt-get`.
+
+### Controle de custo
+
+Geração de imagem e de vídeo por IA têm preços muito diferentes — vídeo custa
+cerca de 30 vezes mais por execução. Por isso cada uma tem seu próprio
+interruptor no `config.yaml` (`usar_ia_imagem`, `usar_ia_video`), e o vídeo vem
+desligado. Habilitar faturamento no provedor não deve abrir as duas torneiras
+sem alguém escolher.
 
 ---
 

@@ -59,6 +59,8 @@ PADRAO: dict[str, Any] = {
         "intervalo_status_segundos": 6,
     },
     "ia": {
+        "usar_ia_imagem": True,
+        "usar_ia_video": False,
         "modelo_texto": "claude-opus-4-8",
         "modelo_imagem": "gemini-3.1-flash-image",
         "modelo_video": "veo-3.1-fast-generate-preview",

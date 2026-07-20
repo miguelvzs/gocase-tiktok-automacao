@@ -4,13 +4,22 @@ Este é o ativo com valor de negócio do projeto. Um clipe de vídeo generativo
 não é imprimível; uma arte é. A GoCase fabrica sob demanda, então o que a
 automação precisa produzir é um arquivo que a fábrica conseguiria usar.
 
-Dois caminhos, mesma assinatura:
-  1. Nano Banana (Gemini) — arte gerada por IA a partir do conceito.
-  2. Pillow — composição geométrica a partir da paleta da marca.
+Três caminhos, mesma assinatura, em ordem de preferência:
 
-O fallback não é decoração. Cota de IA acaba, chave falta, API muda. O segundo
-caminho garante que o pipeline sempre entregue algo publicável, e a resposta
-sempre informa qual foi usado.
+  1. **Gerador de imagem** (Nano Banana) — maior alcance visual: textura,
+     pintura, grão. É o melhor resultado quando há cota disponível.
+  2. **Vetor desenhado pelo Claude** — SVG rasterizado localmente. Perde
+     textura, mas acerta o tema, e vetor é o formato certo para impressão:
+     escala sem perda e separa cores.
+  3. **Composição geométrica local** — sempre disponível, na paleta da marca.
+
+Os caminhos de reserva não são decoração. Cota acaba, chave falta, API muda. A
+resposta sempre informa qual foi usado, no campo `etapas.arte` do relatório.
+
+A rasterização usa svglib e reportlab (Python puro) e pypdfium2 (binário
+embutido no pacote). Nenhuma dependência de biblioteca do sistema — a mesma
+escolha feita para o FFmpeg, pelo mesmo motivo: o projeto precisa subir num
+runtime onde não existe apt-get.
 """
 
 from __future__ import annotations
@@ -20,6 +29,8 @@ import colorsys
 import hashlib
 import logging
 import math
+import re
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 import httpx
@@ -30,6 +41,24 @@ log = logging.getLogger(__name__)
 ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/interactions"
 
 
+def motivo_http(erro: Exception) -> str:
+    """Extrai a mensagem real de um erro HTTP.
+
+    Sem isto, a falha vira "400 Bad Request" — que não diz se o problema foi
+    formato de requisição, cota ou credencial, e transforma diagnóstico em
+    adivinhação.
+    """
+    resposta = getattr(erro, "response", None)
+    if resposta is None:
+        return str(erro)
+    try:
+        corpo = resposta.json().get("error", {})
+        detalhe = corpo.get("message") or corpo.get("status") or resposta.text
+    except Exception:
+        detalhe = resposta.text
+    return f"HTTP {resposta.status_code}: {str(detalhe)[:300]}"
+
+
 def gerar(
     *,
     conceito: str,
@@ -38,8 +67,14 @@ def gerar(
     modelo: str,
     api_key: str | None,
     tamanho: tuple[int, int] = (1024, 1024),
+    chave_anthropic: str | None = None,
+    modelo_texto: str = "claude-opus-4-8",
 ) -> tuple[Path, str]:
-    """Produz a arte. Devolve (caminho, origem) onde origem é 'ia' ou 'local'."""
+    """Produz a arte.
+
+    Devolve `(caminho, origem)` com origem em `imagem_ia`, `vetor_ia` ou
+    `local`, na ordem de preferência descrita no topo do módulo.
+    """
     if api_key:
         try:
             _gerar_com_ia(
@@ -49,18 +84,45 @@ def gerar(
                 api_key=api_key,
                 tamanho=tamanho,
             )
-            log.info("Arte gerada por IA: %s", destino.name)
-            return destino, "ia"
+            log.info("Arte gerada por IA de imagem: %s", destino.name)
+            return destino, "imagem_ia"
         except Exception as erro:
-            log.warning("Geração por IA falhou (%s); usando composição local.", erro)
-    else:
-        log.info("GOOGLE_API_KEY ausente; usando composição local.")
+            log.warning(
+                "Geração de arte por IA de imagem falhou (%s); tentando vetor.",
+                motivo_http(erro),
+            )
+
+    if chave_anthropic:
+        try:
+            _gerar_vetor(
+                conceito=conceito,
+                destino=destino,
+                paleta=paleta,
+                api_key=chave_anthropic,
+                modelo=modelo_texto,
+                tamanho=tamanho,
+            )
+            log.info("Arte vetorial gerada e rasterizada: %s", destino.name)
+            return destino, "vetor_ia"
+        except Exception as erro:
+            log.warning(
+                "Geração vetorial falhou (%s); usando composição local.", erro
+            )
 
     _gerar_local(conceito=conceito, destino=destino, paleta=paleta, tamanho=tamanho)
     return destino, "local"
 
 
 # --------------------------------------------------------------------- via IA
+
+# Proporções aceitas pela API de imagem. Pedir um valor fora da lista é erro,
+# então escolhemos a mais próxima da área de impressão do produto.
+PROPORCOES = {"1:1": 1.0, "3:4": 0.75, "9:16": 0.5625, "4:3": 1.333, "16:9": 1.777}
+
+
+def _proporcao_proxima(tamanho: tuple[int, int]) -> str:
+    alvo = tamanho[0] / tamanho[1]
+    return min(PROPORCOES, key=lambda p: abs(PROPORCOES[p] - alvo))
 
 
 def _gerar_com_ia(
@@ -76,9 +138,12 @@ def _gerar_com_ia(
         "input": [{"type": "text", "text": conceito}],
         "response_format": {
             "type": "image",
-            "mime_type": "image/png",
-            # Quadrado: a área de impressão da capinha, não o formato do vídeo.
-            "aspect_ratio": "1:1",
+            # A API só aceita image/jpeg aqui. Convertemos para PNG ao
+            # normalizar, logo abaixo — a arte segue adiante sem perda extra.
+            "mime_type": "image/jpeg",
+            # Proporção da área de impressão do produto, não do vídeo. A API
+            # aceita um conjunto fixo de valores; escolhemos o mais próximo.
+            "aspect_ratio": _proporcao_proxima(tamanho),
             "image_size": "1K",
         },
     }
@@ -118,6 +183,138 @@ def _extrair_imagem(dados: dict) -> str | None:
             if isinstance(interno, dict) and interno.get("data"):
                 return str(interno["data"])
     return None
+
+
+# ------------------------------------------------------------- vetor por IA
+
+def _esquema_svg(largura: int, altura: int) -> dict:
+    return {
+        "type": "object",
+        "properties": {
+            "svg": {
+                "type": "string",
+                "description": (
+                    "Um documento SVG completo e válido, começando em '<svg' e "
+                    f"terminando em '</svg>', com viewBox='0 0 {largura} {altura}'. "
+                    "Sem texto, sem fontes, sem imagens externas, sem script. "
+                    "Apenas formas vetoriais: path, circle, ellipse, rect, "
+                    "polygon, line e linearGradient."
+                ),
+            }
+        },
+        "required": ["svg"],
+        "additionalProperties": False,
+    }
+
+# Elementos e atributos que nunca devem aparecer numa arte gerada. `image` e
+# href externo fariam o rasterizador buscar recurso remoto; `script` e
+# `foreignObject` são superfície de execução. Não confiamos na instrução do
+# prompt para isso — verificamos.
+TAGS_PROIBIDAS = {"script", "image", "foreignobject", "use", "iframe"}
+
+
+def _gerar_vetor(
+    *,
+    conceito: str,
+    destino: Path,
+    paleta: dict[str, str],
+    api_key: str,
+    modelo: str,
+    tamanho: tuple[int, int],
+) -> None:
+    import anthropic
+
+    largura, altura = tamanho
+    cores = ", ".join(f"{valor}" for valor in paleta.values())
+    sistema = (
+        "Você é ilustrador vetorial. Produz arte para impressão na traseira de "
+        "uma capinha de celular.\n\n"
+        f"FORMATO: retrato alto, {largura}x{altura} (proporção "
+        f"{largura / altura:.2f}:1). Componha para essa altura — distribua os "
+        "elementos ao longo do eixo vertical em vez de concentrá-los no centro. "
+        "A composição preenche a tela inteira, sem margem vazia.\n\n"
+        f"PALETA — use exclusivamente estas cores e tons derivados delas "
+        f"(mais claro, mais escuro, mais transparente): {cores}. "
+        "Não introduza nenhum matiz fora desta lista. Nada de verde, azul, "
+        "roxo ou rosa se não estiverem acima.\n\n"
+        f"TÉCNICO: viewBox='0 0 {largura} {altura}'. Um retângulo de fundo "
+        "cobrindo tudo. Sem texto, sem fonte, sem imagem externa, sem script. "
+        "Só formas.\n\n"
+        "O terço superior fica atrás do módulo de câmera — evite detalhe fino "
+        "ali. O terço inferior é a área mais visível."
+    )
+    cliente = anthropic.Anthropic(api_key=api_key)
+    resposta = cliente.messages.create(
+        model=modelo,
+        max_tokens=8000,
+        system=sistema,
+        messages=[{"role": "user", "content": f"Desenhe: {conceito}"}],
+        output_config={
+            "format": {"type": "json_schema", "schema": _esquema_svg(largura, altura)}
+        },
+    )
+    if resposta.stop_reason == "max_tokens":
+        raise RuntimeError("SVG truncado — a arte ficaria incompleta")
+
+    texto = next((b.text for b in resposta.content if b.type == "text"), "")
+    import json
+
+    svg = json.loads(texto)["svg"]
+    _conferir_svg(svg)
+    _rasterizar(svg, destino, tamanho)
+    log.info(
+        "Vetor gerado (%d tokens, %d bytes de SVG).",
+        resposta.usage.output_tokens,
+        len(svg),
+    )
+
+
+def _conferir_svg(svg: str) -> None:
+    """Recusa SVG malformado ou com elemento capaz de buscar recurso externo."""
+    if "<svg" not in svg:
+        raise ValueError("resposta não contém elemento <svg>")
+    try:
+        raiz = ET.fromstring(svg)
+    except ET.ParseError as erro:
+        raise ValueError(f"SVG malformado: {erro}") from erro
+
+    for elemento in raiz.iter():
+        tag = elemento.tag.split("}")[-1].lower()
+        if tag in TAGS_PROIBIDAS:
+            raise ValueError(f"SVG contém elemento não permitido: <{tag}>")
+    if re.search(r'(xlink:)?href\s*=\s*["\']\s*(https?:|//|file:)', svg, re.I):
+        raise ValueError("SVG referencia recurso externo")
+
+
+def _rasterizar(svg: str, destino: Path, tamanho: tuple[int, int]) -> None:
+    """SVG → PDF → PNG, tudo com pacotes pip, sem biblioteca de sistema."""
+    import pypdfium2
+    from reportlab.graphics import renderPDF
+    from svglib.svglib import svg2rlg
+
+    destino.parent.mkdir(parents=True, exist_ok=True)
+    temporario_svg = destino.with_suffix(".svg")
+    temporario_pdf = destino.with_suffix(".pdf")
+    temporario_svg.write_text(svg, encoding="utf-8")
+
+    desenho = svg2rlg(str(temporario_svg))
+    if desenho is None:
+        raise ValueError("svglib não conseguiu interpretar o SVG")
+    renderPDF.drawToFile(desenho, str(temporario_pdf))
+
+    # O documento precisa ser fechado antes de remover o arquivo: no Windows o
+    # pypdfium2 mantém o PDF aberto e o unlink falha com WinError 32.
+    documento = pypdfium2.PdfDocument(str(temporario_pdf))
+    try:
+        pagina = documento[0]
+        escala = max(tamanho) / max(pagina.get_size())
+        imagem = pagina.render(scale=escala).to_pil().convert("RGB")
+        imagem.resize(tamanho, Image.LANCZOS).save(destino, "PNG")
+    finally:
+        documento.close()
+
+    temporario_pdf.unlink(missing_ok=True)
+    # O .svg fica: é o ativo vetorial que a fábrica usaria para imprimir.
 
 
 # ------------------------------------------------------------------- local

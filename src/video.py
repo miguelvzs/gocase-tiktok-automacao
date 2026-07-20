@@ -88,7 +88,12 @@ def montar(
             )
             origem = "ia"
         except Exception as erro:
-            log.warning("Veo indisponível (%s); usando animação local.", erro)
+            from .arte import motivo_http
+
+            log.warning(
+                "Geração de vídeo por IA falhou (%s); usando animação local.",
+                motivo_http(erro),
+            )
 
     if origem == "local":
         _animar_local(

@@ -77,7 +77,13 @@ def executar_pipeline(
     }
     relatorio["uso_ia"] = pacote.get("_uso", {})
 
+    # A chave é a mesma para imagem e vídeo, mas os custos são muito diferentes:
+    # vídeo custa cerca de 30 vezes mais por execução. Por isso cada etapa tem
+    # seu próprio interruptor — ligar o billing na Google não deve abrir as duas
+    # torneiras de uma vez, sem o operador escolher.
     google_key = segredo("GOOGLE_API_KEY")
+    chave_imagem = google_key if cfg["ia"].get("usar_ia_imagem", True) else None
+    chave_video = google_key if cfg["ia"].get("usar_ia_video", False) else None
 
     # 3. A arte imprimível — o ativo com valor de negócio
     avisar("arte", "Gerando a arte da capinha")
@@ -87,8 +93,10 @@ def executar_pipeline(
         destino=destino / "arte.png",
         paleta=cfg["marca"]["paleta"],
         modelo=cfg["ia"]["modelo_imagem"],
-        api_key=google_key,
+        api_key=chave_imagem,
         tamanho=(int(area[0]), int(area[1])),
+        chave_anthropic=segredo("ANTHROPIC_API_KEY"),
+        modelo_texto=cfg["ia"]["modelo_texto"],
     )
     relatorio["etapas"]["arte"] = origem_arte
 
@@ -118,7 +126,7 @@ def executar_pipeline(
         duracao=v["duracao_segundos"],
         zoom=v["fallback_zoom"],
         modelo=cfg["ia"]["modelo_video"],
-        api_key=google_key,
+        api_key=chave_video,
         prompt_movimento=pacote.get("movimento", ""),
     )
     relatorio["etapas"]["video"] = origem_video

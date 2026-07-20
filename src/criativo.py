@@ -87,7 +87,12 @@ ESQUEMA = {
         },
         "cta": {
             "type": "string",
-            "description": "Chamada para ação em português, até 30 caracteres.",
+            "description": (
+                "Chamada para ação em português, até 30 caracteres. Use o "
+                "imperativo na 3ª pessoa, que é a forma correta ao tratar o "
+                "leitor por 'você': 'Monte a sua', 'Escolha a sua', 'Peça a "
+                "sua'. Nunca a 2ª pessoa ('Monta', 'Escolhe', 'Pede')."
+            ),
         },
         "hashtags": {
             "type": "array",
@@ -121,7 +126,9 @@ def _sistema(marca: dict[str, Any]) -> str:
         "pode estar impressa num produto hoje. O conteúdo deve refletir "
         "velocidade e personalização, não catálogo genérico.\n\n"
         f"Proibido, sem exceção:\n{proibido}\n\n"
-        "Escreva para TikTok: direto, sem rodeio, sem linguagem corporativa."
+        "Escreva para TikTok: direto, sem rodeio, sem linguagem corporativa.\n\n"
+        "Português do Brasil correto. Ao dar uma ordem ou convite ao leitor, "
+        "use o imperativo na 3ª pessoa — 'Monte a sua', não 'Monta a sua'."
     )
 
 
