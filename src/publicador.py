@@ -107,6 +107,23 @@ class Publicador:
             "informe ZERNIO_TIKTOK_ACCOUNT_ID."
         )
 
+    def perfil_url(self, account_id: str) -> str | None:
+        """URL pública do perfil da conta.
+
+        Serve de rede de segurança: a TikTok nem sempre devolve o link do post
+        recém-publicado — o campo vem como string vazia mesmo com status
+        `published`. Sem isto, o operador recebe "publicado" e nenhuma forma de
+        conferir. Com o perfil, ele acha o post em um clique.
+        """
+        for conta in self.listar_contas():
+            if str(conta.get("_id") or conta.get("id")) == account_id:
+                url = conta.get("profileUrl")
+                if url:
+                    return str(url)
+                usuario = conta.get("username")
+                return f"https://www.tiktok.com/@{usuario}" if usuario else None
+        return None
+
     def info_criador(self, account_id: str) -> dict[str, Any]:
         """Consulta o que a conta do criador aceita agora.
 

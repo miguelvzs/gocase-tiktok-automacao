@@ -63,6 +63,9 @@ def main() -> int:
         print(f"  Estado ......... {relatorio['estado']}")
         if relatorio.get("url_publica"):
             print(f"  No ar .......... {relatorio['url_publica']}")
+        elif relatorio.get("url_perfil"):
+            print(f"  Perfil ......... {relatorio['url_perfil']}")
+            print("                   (a TikTok não devolveu o link direto do post)")
         if relatorio.get("aviso"):
             print(f"  Aviso .......... {relatorio['aviso']}")
         print(f"  Tempo .......... {relatorio['segundos']}s")

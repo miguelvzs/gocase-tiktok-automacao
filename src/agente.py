@@ -190,6 +190,12 @@ def executar_pipeline(
         else:
             relatorio["estado"] = "criado"
 
+        # A TikTok frequentemente devolve o link do post vazio mesmo com status
+        # `published`. Sem uma alternativa, o operador recebe "publicado" e
+        # nenhuma forma de conferir.
+        if not relatorio.get("url_publica"):
+            relatorio["url_perfil"] = publicador.perfil_url(conta)
+
     relatorio["segundos"] = round(time.monotonic() - inicio, 1)
     avisar("fim", _resumo(relatorio))
     return relatorio
