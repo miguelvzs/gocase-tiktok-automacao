@@ -245,9 +245,13 @@ def _animar_local(
     quadros = duracao * fps
     passo = (zoom - 1.0) / quadros
     # Sobe a resolução antes do zoom: sem isso o zoompan amplia pixels já
-    # renderizados e o resultado sai borrado.
+    # renderizados e o resultado sai borrado. O fator é 1,5 e não 2 porque só
+    # precisa cobrir o zoom máximo (1,18) com folga — dobrar a resolução
+    # quadruplicaria o buffer de quadro à toa, e o serviço roda em container
+    # de 512 MB.
+    fator = 1.5
     filtro = (
-        f"scale={largura * 2}:{altura * 2},"
+        f"scale={int(largura * fator)}:{int(altura * fator)},"
         f"zoompan=z='min(zoom+{passo:.6f},{zoom})'"
         f":x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)'"
         f":d={quadros}:s={largura}x{altura}:fps={fps}"
