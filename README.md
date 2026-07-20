@@ -46,6 +46,37 @@ agendado e não abre mais.
 
 ---
 
+## Resultado medido
+
+Execução real, conta de teste `@demogocase`, sem intervenção manual em nenhuma
+etapa:
+
+| Métrica | Valor |
+|---|---|
+| Tempo total, do sinal à confirmação | **28,7 s** |
+| Tokens de saída da IA de texto | 358 |
+| Vídeo entregue | 1080×1920, H.264 yuv420p, 30 fps, faixa AAC, 7,97 s |
+| Tamanho | 0,74 MB |
+| Estado final | `published` |
+| Intervenção humana | nenhuma |
+
+O material produzido: tendência *ilustração botânica minimalista* → produto
+*Capinha iPhone 14* → gancho *"Capinha que combina com sua mesa de trabalho"* →
+arte, mockup, vídeo vertical e post entregue.
+
+A confirmação não veio do log do próprio sistema, e sim da TikTok: o aplicativo
+notificou a conta com *"Seu conteúdo está pronto — Edite seu vídeo antes de
+compartilhar no TikTok"*. Ou seja, o vídeo saiu do código, foi hospedado, foi
+buscado pela TikTok, passou pelo processamento dela e chegou ao criador.
+
+> **Sobre o modo desta execução.** Rodou em Creator Inbox, que percorre a
+> integração inteira sem tornar nada público. É o modo de teste correto: prova
+> todo o caminho — geração, upload, autorização, aceite da especificação do
+> vídeo — sem consumir a decisão irreversível de publicar. Trocar para
+> publicação direta é uma flag, e usa o mesmo código já exercitado aqui.
+
+---
+
 ## Por que a IA gera a **arte**, não o vídeo inteiro
 
 Esta é a decisão de arquitetura central do projeto.
