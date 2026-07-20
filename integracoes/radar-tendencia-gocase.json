@@ -1,0 +1,325 @@
+{
+  "name": "Radar de Tendência — GoCase",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "a1000000-0000-4000-8000-000000000001",
+      "name": "Disparo manual",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [-460, 300]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "days",
+              "triggerAtHour": 10
+            }
+          ]
+        }
+      },
+      "id": "a1000000-0000-4000-8000-000000000002",
+      "name": "Todo dia às 10h",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [-460, 480],
+      "disabled": true,
+      "notes": "Habilite para operar sozinho. Respeite o limite diário de posts por API da TikTok."
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "c1",
+              "name": "api_url",
+              "value": "http://localhost:8000",
+              "type": "string"
+            },
+            {
+              "id": "c2",
+              "name": "sinal_id",
+              "value": "",
+              "type": "string"
+            },
+            {
+              "id": "c3",
+              "name": "sku",
+              "value": "",
+              "type": "string"
+            },
+            {
+              "id": "c4",
+              "name": "publicar",
+              "value": false,
+              "type": "boolean"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a1000000-0000-4000-8000-000000000003",
+      "name": "Configuração",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [-240, 380],
+      "notes": "ÚNICO campo a ajustar: api_url. Aponte para onde o serviço Python está publicado. sinal_id e sku vazios = o sistema escolhe uma combinação inédita. publicar=false gera tudo sem ir ao ar."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.api_url }}/publicar",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ sinal_id: $json.sinal_id || null, sku: $json.sku || null, rascunho: !$json.publicar }) }}",
+        "options": {
+          "timeout": 60000,
+          "response": {
+            "response": {
+              "neverError": false
+            }
+          }
+        }
+      },
+      "id": "a1000000-0000-4000-8000-000000000004",
+      "name": "Dispara o job",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [-20, 380],
+      "notes": "Devolve 202 e um job_id. Não bloqueia: a geração de vídeo leva minutos e estouraria qualquer timeout HTTP."
+    },
+    {
+      "parameters": {
+        "amount": 15,
+        "unit": "seconds"
+      },
+      "id": "a1000000-0000-4000-8000-000000000005",
+      "name": "Aguarda",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [200, 380],
+      "webhookId": "b2000000-0000-4000-8000-000000000005",
+      "notes": "O intervalo de consulta também mantém tráfego no serviço, impedindo que ele hiberne no meio do job."
+    },
+    {
+      "parameters": {
+        "url": "={{ $('Configuração').first().json.api_url }}/jobs/{{ $('Dispara o job').first().json.job_id }}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "a1000000-0000-4000-8000-000000000006",
+      "name": "Consulta o estado",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [420, 380]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "d1",
+              "leftValue": "={{ $json.estado }}",
+              "rightValue": "executando",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "a1000000-0000-4000-8000-000000000007",
+      "name": "Ainda executando?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [640, 380],
+      "notes": "Saída verdadeira volta para Aguarda — este é o laço de polling."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "e1",
+              "leftValue": "={{ $json.estado }}",
+              "rightValue": "concluido",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "a1000000-0000-4000-8000-000000000008",
+      "name": "Deu certo?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [860, 460]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "f1",
+              "name": "produto",
+              "value": "={{ $json.relatorio.produto.nome }}",
+              "type": "string"
+            },
+            {
+              "id": "f2",
+              "name": "tendencia",
+              "value": "={{ $json.relatorio.sinal.tema }}",
+              "type": "string"
+            },
+            {
+              "id": "f3",
+              "name": "gancho",
+              "value": "={{ $json.relatorio.criativo.gancho }}",
+              "type": "string"
+            },
+            {
+              "id": "f4",
+              "name": "legenda",
+              "value": "={{ $json.relatorio.legenda_publicada }}",
+              "type": "string"
+            },
+            {
+              "id": "f5",
+              "name": "origem_arte",
+              "value": "={{ $json.relatorio.etapas.arte }}",
+              "type": "string"
+            },
+            {
+              "id": "f6",
+              "name": "origem_video",
+              "value": "={{ $json.relatorio.etapas.video }}",
+              "type": "string"
+            },
+            {
+              "id": "f7",
+              "name": "estado_post",
+              "value": "={{ $json.relatorio.estado }}",
+              "type": "string"
+            },
+            {
+              "id": "f8",
+              "name": "url_publica",
+              "value": "={{ $json.relatorio.url_publica || 'não publicado (rascunho)' }}",
+              "type": "string"
+            },
+            {
+              "id": "f9",
+              "name": "duracao_segundos",
+              "value": "={{ $json.relatorio.segundos }}",
+              "type": "number"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a1000000-0000-4000-8000-000000000009",
+      "name": "Relatório de execução",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [1080, 380],
+      "notes": "Equivale ao segundo agente do vídeo de referência. Ligue um nó de Gmail ou Slack aqui para notificar a operação."
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "g1",
+              "name": "erro",
+              "value": "={{ $json.erro || 'estado inesperado: ' + $json.estado }}",
+              "type": "string"
+            },
+            {
+              "id": "g2",
+              "name": "tipo",
+              "value": "={{ $json.tipo_erro || 'desconhecido' }}",
+              "type": "string"
+            },
+            {
+              "id": "g3",
+              "name": "etapa",
+              "value": "={{ $json.etapa }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a1000000-0000-4000-8000-000000000010",
+      "name": "Falha tratada",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [1080, 560],
+      "notes": "A etapa diz onde parou: criativo, arte, video, upload ou publicacao."
+    }
+  ],
+  "connections": {
+    "Disparo manual": {
+      "main": [[{ "node": "Configuração", "type": "main", "index": 0 }]]
+    },
+    "Todo dia às 10h": {
+      "main": [[{ "node": "Configuração", "type": "main", "index": 0 }]]
+    },
+    "Configuração": {
+      "main": [[{ "node": "Dispara o job", "type": "main", "index": 0 }]]
+    },
+    "Dispara o job": {
+      "main": [[{ "node": "Aguarda", "type": "main", "index": 0 }]]
+    },
+    "Aguarda": {
+      "main": [[{ "node": "Consulta o estado", "type": "main", "index": 0 }]]
+    },
+    "Consulta o estado": {
+      "main": [[{ "node": "Ainda executando?", "type": "main", "index": 0 }]]
+    },
+    "Ainda executando?": {
+      "main": [
+        [{ "node": "Aguarda", "type": "main", "index": 0 }],
+        [{ "node": "Deu certo?", "type": "main", "index": 0 }]
+      ]
+    },
+    "Deu certo?": {
+      "main": [
+        [{ "node": "Relatório de execução", "type": "main", "index": 0 }],
+        [{ "node": "Falha tratada", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "meta": {
+    "instanceId": "radar-tendencia-gocase"
+  },
+  "tags": []
+}

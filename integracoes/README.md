@@ -1,0 +1,155 @@
+# Integração — n8n e API HTTP
+
+O fluxo n8n é a orquestração; o serviço Python faz o trabalho. Esta separação
+existe por um motivo concreto: a geração de vídeo leva de 1 a 3 minutos, e
+nenhum request HTTP síncrono sobrevive a isso. O contrato é assíncrono.
+
+---
+
+## O fluxo
+
+[`radar-tendencia-gocase.json`](radar-tendencia-gocase.json) — importe uma vez
+pelo menu **Import from File** do n8n.
+
+```
+Disparo manual ─┐
+                ├─→ Configuração ─→ Dispara o job ─→ Aguarda ─→ Consulta o estado
+Todo dia às 10h ┘                                       ↑              │
+                                                        │              ↓
+                                                        └──── Ainda executando?
+                                                                       │ não
+                                                                       ↓
+                                                                  Deu certo?
+                                                                   ↙        ↘
+                                                    Relatório de execução  Falha tratada
+```
+
+**Um único campo a ajustar:** `api_url`, no nó *Configuração*. Aponte para onde
+o serviço Python está publicado. Nada mais no arquivo precisa mudar — não há
+credencial embutida nem caminho de disco, então ele importa em qualquer máquina.
+
+Os outros campos do nó *Configuração*:
+
+| Campo | Efeito |
+|---|---|
+| `sinal_id` | Vazio: o sistema escolhe uma tendência ainda não usada. Preenchido: fixa a tendência. |
+| `sku` | Vazio: o sistema escolhe o produto. Preenchido: fixa o produto. |
+| `publicar` | `false` gera tudo e envia como rascunho. `true` vai ao ar. |
+
+O gatilho agendado vem desabilitado de propósito. A TikTok impõe um limite
+diário de posts por API, por conta — ligar o agendamento sem calibrar a
+frequência queima a cota.
+
+---
+
+## Por que HTTP Request e não um nó de TikTok
+
+Não existe nó nativo de TikTok no n8n. O único nó da comunidade
+([`@igabm/n8n-nodes-tiktok`](https://github.com/igabm/n8n-nodes-tiktok)) está
+marcado pelo próprio autor como *"Work In Progress — Not Working Yet"*.
+
+O vídeo de referência do desafio resolve o mesmo problema do mesmo jeito: usa
+um HTTP Request node para a Perplexity porque não havia nó nativo. É o padrão
+estabelecido pela própria referência, não um contorno.
+
+---
+
+## Contrato da API
+
+Base: a URL do serviço. Tudo é HTTP + JSON, sem SDK.
+
+### `POST /publicar`
+
+Aceita o pedido e devolve imediatamente. **Não bloqueia.**
+
+```json
+{ "sinal_id": null, "sku": null, "rascunho": true }
+```
+
+Resposta `202`:
+
+```json
+{ "job_id": "b7c1…", "consultar": "/jobs/b7c1…" }
+```
+
+### `GET /jobs/{job_id}`
+
+Estado corrente. Enquanto executa, `etapa` diz onde está — útil para exibir
+progresso em vez de uma barra parada.
+
+```json
+{
+  "job_id": "b7c1…",
+  "estado": "executando",
+  "etapa": "video",
+  "mensagem": "Montando o vídeo vertical"
+}
+```
+
+Concluído:
+
+```json
+{
+  "estado": "concluido",
+  "relatorio": {
+    "produto": { "sku": "CASE-IPH-15P", "nome": "Capinha iPhone 15 Pro" },
+    "sinal": { "id": "inverno-retro", "tema": "estética retrô anos 90…" },
+    "criativo": { "gancho": "…", "legenda": "…", "hashtags": ["…"] },
+    "etapas": { "arte": "ia", "video": "local" },
+    "estado": "published",
+    "url_publica": "https://www.tiktok.com/@…/video/…",
+    "video_mb": 4.1,
+    "segundos": 96.4
+  }
+}
+```
+
+Falhou:
+
+```json
+{ "estado": "falhou", "etapa": "publicacao", "erro": "…", "tipo_erro": "ErroPublicacao" }
+```
+
+O campo `etapa` sobrevive à falha — dá para saber se quebrou na redação, na
+geração da arte, no vídeo, no upload ou na publicação.
+
+### `GET /jobs/{job_id}/video`
+
+Baixa o MP4 gerado. Útil para conferir o material antes de publicar.
+
+### `GET /catalogo`
+
+Sinais e produtos disponíveis. Existe para que o n8n monte listas de opção sem
+duplicar o `config.yaml` — fonte única de verdade.
+
+### `GET /`
+
+Saúde do serviço e número de jobs ativos.
+
+---
+
+## Estados possíveis de `relatorio.estado`
+
+| Estado | Significado |
+|---|---|
+| `rascunho` | Gerado e enviado ao Zernio sem publicar. |
+| `criado` | Post criado, publicação ainda não confirmada. |
+| `published` | Confirmado no ar pela TikTok. |
+| `partial` | A TikTok aceitou parcialmente — confira o post. |
+| `indeterminado` | O post existe, mas o status não concluiu no tempo do polling. **Não republique** — confira o painel do Zernio antes, para não duplicar. |
+
+---
+
+## Consumindo sem n8n
+
+Por ser HTTP puro, Make, Power Automate, um cron com `curl` ou código próprio
+consomem o mesmo contrato. O n8n é o caminho documentado e testado por ser o
+padrão na GoCase.
+
+```bash
+JOB=$(curl -s -X POST "$API/publicar" -H 'Content-Type: application/json' \
+      -d '{"rascunho": true}' | python -c "import sys,json;print(json.load(sys.stdin)['job_id'])")
+
+until curl -s "$API/jobs/$JOB" | grep -q '"estado": *"\(concluido\|falhou\)"'; do sleep 15; done
+curl -s "$API/jobs/$JOB"
+```

@@ -1,0 +1,98 @@
+# Radar de Tendência — configuração de negócio
+#
+# Tudo que um time de marketing ajustaria sem abrir Python vive aqui.
+# Ausência ou erro neste arquivo não derruba a execução: src/config.py
+# cai para os padrões embutidos e avisa.
+
+marca:
+  nome: GoCase
+  # Voz da marca. Entra no prompt do redator e limita o que a IA pode escrever.
+  voz: >-
+    Direta, jovem e brasileira. Fala de produto, não de sentimento genérico.
+    Sem superlativo vazio, sem "revolucionário", sem "eleve seu estilo".
+  # Paleta de demonstração. Não são as cores oficiais da GoCase — são um
+  # conjunto coerente para o business case. Trocar aqui repinta todo o material.
+  paleta:
+    primaria: "#FF5A1F"
+    secundaria: "#1A1A2E"
+    destaque: "#FFD166"
+    fundo: "#F7F7F9"
+  # Proibições duras. Verificadas por código depois da geração, não só pedidas
+  # no prompt — modelo de linguagem não é mecanismo de garantia.
+  proibido:
+    - promessa de prazo de entrega
+    - preço ou desconto
+    - comparação direta com concorrente
+    - superlativo sem lastro
+    - menção a saúde, política ou religião
+
+# Catálogo de produtos. Espelha o "Google Sheets trigger" do vídeo de
+# referência: a automação lê uma fonte de dados de produto, não inventa SKU.
+produtos:
+  - sku: CASE-IPH-15P
+    nome: Capinha iPhone 15 Pro
+    linha: Impact Pro
+    area_arte: [1024, 1024]
+  - sku: CASE-SAM-S24
+    nome: Capinha Galaxy S24
+    linha: Impact Pro
+    area_arte: [1024, 1024]
+  - sku: CASE-IPH-14
+    nome: Capinha iPhone 14
+    linha: Slim
+    area_arte: [1024, 1024]
+
+# Sinais de tendência. Cada execução escolhe um e o marca como usado, para que
+# execuções seguidas não gerem conteúdo idêntico — o Zernio rejeita conteúdo
+# duplicado na mesma conta dentro de 24h com HTTP 409.
+sinais:
+  - id: inverno-retro
+    tema: "estética retrô anos 90 voltando no inverno"
+    publico: "18-24, universitário"
+  - id: volta-as-aulas
+    tema: "volta às aulas, personalização de material"
+    publico: "16-22, estudante"
+  - id: festa-junina
+    tema: "festa junina reinterpretada em ilustração moderna"
+    publico: "18-30, interior e capital"
+  - id: gamer-neon
+    tema: "cultura gamer, paleta neon e cyber"
+    publico: "16-28, gamer"
+  - id: botanico-minimal
+    tema: "ilustração botânica minimalista"
+    publico: "22-35, design e escritório"
+
+video:
+  largura: 1080
+  altura: 1920
+  fps: 30
+  duracao_segundos: 8      # TikTok exige entre 3s e 10min
+  codec: libx264
+  # Usado quando a geração de vídeo por IA não está disponível.
+  fallback_zoom: 1.18      # fator do Ken Burns no fallback FFmpeg
+
+publicacao:
+  # Compliance TikTok. Estes valores não são opinião — são exigência.
+  privacidade_desejada: PUBLIC_TO_EVERYONE
+  permitir_comentario: true
+  permitir_duet: true
+  permitir_stitch: true
+  # Conteúdo é gerado por IA: divulgação obrigatória pela política da TikTok.
+  feito_com_ia: true
+  # A GoCase promove o próprio negócio, não parceria paga de terceiro.
+  tipo_conteudo_comercial: brand_organic
+  # Polling do status de publicação.
+  tentativas_status: 20
+  intervalo_status_segundos: 6
+
+ia:
+  modelo_texto: claude-opus-4-8
+  # Imagen é descontinuado em 17/08/2026. Usamos a linha Nano Banana, que é a
+  # migração recomendada pela própria Google.
+  modelo_imagem: gemini-3.1-flash-image
+  # Variante "fast": mesma família, custo menor. Trocar por
+  # veo-3.1-generate-preview se a fidelidade do movimento não bastar.
+  modelo_video: veo-3.1-fast-generate-preview
+  # A saída é um JSON curto. Teto deliberadamente baixo para conter custo —
+  # se a geração truncar, o pipeline avisa em vez de publicar texto cortado.
+  max_tokens: 2000
