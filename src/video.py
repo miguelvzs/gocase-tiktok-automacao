@@ -38,6 +38,27 @@ def _ffmpeg() -> str:
     return imageio_ffmpeg.get_ffmpeg_exe()
 
 
+# Parâmetros de codificação escolhidos por medição, não por hábito.
+#
+# O libx264 aloca buffers de quadro por thread e por quadro de lookahead. Nos
+# padrões, codificar 1080x1920 consumia 906 MB — mais do que o container de
+# 512 MB do plano gratuito, e o serviço morria por falta de memória.
+#
+# `-threads` do FFmpeg NÃO controla o threading interno do x264; é preciso
+# passar `threads=1` dentro de `-x264-params`. Só isso derrubou de 906 para
+# 336 MB. Limitar refs e lookahead levou a 293.
+#
+# A quantidade de memória não é problema de qualidade aqui: o arquivo final
+# fica abaixo de 1 MB contra um teto de 25 MB, então sobra folga para usar um
+# CRF baixo e compensar o preset rápido.
+X264_ECONOMICO = (
+    "threads=1:lookahead_threads=1:sliced-threads=0:"
+    "rc-lookahead=10:sync-lookahead=0:ref=2:bframes=0"
+)
+PRESET = "veryfast"
+CRF = "20"
+
+
 def _rodar(argumentos: list[str]) -> None:
     processo = subprocess.run(
         [_ffmpeg(), "-hide_banner", "-loglevel", "error", "-y", *argumentos],
@@ -95,16 +116,21 @@ def montar(
                 motivo_http(erro),
             )
 
-    if origem == "local":
-        _animar_local(
-            mockup=mockup,
-            destino=bruto,
-            largura=largura,
-            altura=altura,
-            fps=fps,
-            duracao=duracao,
-            zoom=zoom,
+    # Uma única codificação, não duas. Antes o caminho local gerava um MP4
+    # intermediário que era relido e recodificado para receber a legenda —
+    # decodificar e codificar 1080x1920 ao mesmo tempo custava 448 MB, acima do
+    # que um container de 512 MB suporta. Agora o movimento e a legenda entram
+    # no mesmo grafo de filtros e o vídeo é codificado uma vez só.
+    if origem == "ia":
+        entrada = bruto
+        filtro_base = (
+            f"[0:v]scale={largura}:{altura}:force_original_aspect_ratio=increase,"
+            f"crop={largura}:{altura},fps={fps}[bg];"
         )
+    else:
+        entrada = mockup
+        filtro_base = f"[0:v]{_ken_burns(largura, altura, fps, duracao, zoom)}[bg];"
+        log.info("Animação local (Ken Burns, zoom %.2f) no mesmo passe.", zoom)
 
     sobreposicao = trabalho / "legenda.png"
     _desenhar_legenda(
@@ -118,7 +144,8 @@ def montar(
     )
 
     _finalizar(
-        base=bruto,
+        base=entrada,
+        filtro_base=filtro_base,
         sobreposicao=sobreposicao,
         destino=destino,
         largura=largura,
@@ -232,40 +259,28 @@ def _uri_do_video(corpo: dict) -> str | None:
 # ---------------------------------------------------------------- Ken Burns
 
 
-def _animar_local(
-    *,
-    mockup: Path,
-    destino: Path,
-    largura: int,
-    altura: int,
-    fps: int,
-    duracao: int,
-    zoom: float,
-) -> None:
+def _ken_burns(largura: int, altura: int, fps: int, duracao: int, zoom: float) -> str:
+    """Cadeia de filtros do zoom lento sobre o mockup parado.
+
+    Devolve só a expressão: quem codifica é `_finalizar`, num passe único.
+
+    O `zoompan` já multiplica o quadro único de entrada pelo parâmetro `d` — não
+    existe `-loop 1` na entrada. O loop fazia o demuxer bufferizar e custava
+    ~150 MB a mais para produzir exatamente o mesmo vídeo.
+
+    O `scale` antes do zoom evita ampliar pixels já renderizados. O fator é 1,5
+    porque só precisa cobrir o zoom máximo (1,18) com folga; dobrar a resolução
+    quadruplicaria o buffer de quadro sem ganho de nitidez.
+    """
     quadros = duracao * fps
     passo = (zoom - 1.0) / quadros
-    # Sobe a resolução antes do zoom: sem isso o zoompan amplia pixels já
-    # renderizados e o resultado sai borrado. O fator é 1,5 e não 2 porque só
-    # precisa cobrir o zoom máximo (1,18) com folga — dobrar a resolução
-    # quadruplicaria o buffer de quadro à toa, e o serviço roda em container
-    # de 512 MB.
     fator = 1.5
-    filtro = (
+    return (
         f"scale={int(largura * fator)}:{int(altura * fator)},"
         f"zoompan=z='min(zoom+{passo:.6f},{zoom})'"
         f":x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)'"
         f":d={quadros}:s={largura}x{altura}:fps={fps}"
     )
-    _rodar(
-        [
-            "-loop", "1", "-i", str(mockup),
-            "-vf", filtro,
-            "-t", str(duracao),
-            "-c:v", "libx264", "-pix_fmt", "yuv420p", "-r", str(fps),
-            str(destino),
-        ]
-    )
-    log.info("Animação local gerada (Ken Burns, zoom %.2f).", zoom)
 
 
 # ------------------------------------------------------------------- legenda
@@ -364,6 +379,7 @@ def _desenhar_legenda(
 def _finalizar(
     *,
     base: Path,
+    filtro_base: str,
     sobreposicao: Path,
     destino: Path,
     largura: int,
@@ -371,11 +387,15 @@ def _finalizar(
     fps: int,
     duracao: int,
 ) -> None:
-    """Aplica a legenda e normaliza para a especificação da TikTok.
+    """Única codificação do pipeline: movimento, legenda e normalização.
+
+    `filtro_base` transforma a entrada — animação Ken Burns sobre a imagem
+    parada, ou reenquadramento do vídeo vindo da IA — e deixa o resultado no
+    rótulo `[bg]`. A legenda entra por cima no mesmo grafo.
 
     A faixa de áudio silenciosa existe de propósito: vídeo sem stream de áudio
     é aceito pela API, mas o processamento da TikTok é mais confiável com ela
-    presente. Quando o Veo gera áudio nativo, ele é preservado.
+    presente. Quando o vídeo de origem já tem áudio, ele é preservado.
     """
     tem_audio = _tem_audio(base)
     argumentos = [
@@ -387,15 +407,12 @@ def _finalizar(
 
     argumentos += [
         "-filter_complex",
-        (
-            f"[0:v]scale={largura}:{altura}:force_original_aspect_ratio=increase,"
-            f"crop={largura}:{altura},fps={fps}[bg];"
-            f"[bg][1:v]overlay=0:0:format=auto[v]"
-        ),
+        f"{filtro_base}[bg][1:v]overlay=0:0:format=auto[v]",
         "-map", "[v]",
         "-map", "0:a?" if tem_audio else "2:a",
         "-t", str(duracao),
-        "-c:v", "libx264", "-preset", "medium", "-crf", "23",
+        "-c:v", "libx264", "-preset", PRESET, "-crf", CRF,
+        "-x264-params", X264_ECONOMICO,
         "-pix_fmt", "yuv420p", "-profile:v", "high", "-level", "4.0",
         "-c:a", "aac", "-b:a", "128k", "-shortest",
         "-movflags", "+faststart",
@@ -411,7 +428,8 @@ def _finalizar(
         _rodar(
             [
                 "-i", str(destino),
-                "-c:v", "libx264", "-preset", "slow", "-crf", "30",
+                "-c:v", "libx264", "-preset", PRESET, "-crf", "30",
+                "-x264-params", X264_ECONOMICO,
                 "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "96k",
                 "-movflags", "+faststart",
                 str(reduzido),
