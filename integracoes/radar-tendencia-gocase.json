@@ -79,10 +79,10 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ $json.api_url }}/publicar",
+        "url": "={{ $('Configuração').first().json.api_url }}/publicar",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ sinal_id: $json.sinal_id || null, sku: $json.sku || null, rascunho: !$json.publicar }) }}",
+        "jsonBody": "={{ JSON.stringify({ sinal_id: $('Configuração').first().json.sinal_id || null, sku: $('Configuração').first().json.sku || null, rascunho: !$('Configuração').first().json.publicar }) }}",
         "options": {
           "timeout": 60000,
           "response": {
@@ -97,10 +97,13 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        -20,
+        60,
         380
       ],
-      "notes": "Devolve 202 e um job_id. Não bloqueia: a geração de vídeo leva minutos e estouraria qualquer timeout HTTP."
+      "notes": "Devolve 202 e um job_id. Não bloqueia: a geração de vídeo leva minutos e estouraria qualquer timeout HTTP.",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
     },
     {
       "parameters": {
@@ -112,7 +115,7 @@
       "type": "n8n-nodes-base.wait",
       "typeVersion": 1.1,
       "position": [
-        200,
+        280,
         380
       ],
       "webhookId": "b2000000-0000-4000-8000-000000000005",
@@ -130,9 +133,12 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        420,
+        500,
         380
-      ]
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
     },
     {
       "parameters": {
@@ -316,6 +322,32 @@
         560
       ],
       "notes": "A etapa diz onde parou: criativo, arte, video, upload ou publicacao."
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.api_url }}/",
+        "options": {
+          "timeout": 120000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "a1000000-0000-4000-8000-000000000011",
+      "name": "Acorda o serviço",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -130,
+        380
+      ],
+      "alwaysOutputData": true,
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 5000,
+      "notes": "O plano gratuito hiberna após alguns minutos sem uso e a primeira chamada pode voltar 503 enquanto o container sobe. Este nó absorve isso: bate no endpoint de saúde, não trata erro como falha e tenta de novo até acordar. Sem ele, a primeira execução do dia morre antes de começar."
     }
   ],
   "connections": {
@@ -345,7 +377,7 @@
       "main": [
         [
           {
-            "node": "Dispara o job",
+            "node": "Acorda o serviço",
             "type": "main",
             "index": 0
           }
@@ -415,6 +447,17 @@
         [
           {
             "node": "Falha tratada",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Acorda o serviço": {
+      "main": [
+        [
+          {
+            "node": "Dispara o job",
             "type": "main",
             "index": 0
           }
