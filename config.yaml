@@ -17,6 +17,11 @@ marca:
     secundaria: "#1A1A2E"
     destaque: "#FFD166"
     fundo: "#F7F7F9"
+  # Logotipo exibido em fade no fim do vídeo. Caminho relativo à raiz do
+  # projeto. Ausente ou inválido: o vídeo é montado sem ele e o relatório
+  # registra — assinatura de marca não deve derrubar uma publicação.
+  logo: marca/gocase.png
+
   # Proibições duras. Verificadas por código depois da geração, não só pedidas
   # no prompt — modelo de linguagem não é mecanismo de garantia.
   proibido:

@@ -281,53 +281,55 @@ def testar_midia() -> None:
 # ------------------------------------------------------------------ n8n e API
 
 
-def testar_animacao_em_camadas() -> None:
-    print("\nAnimação por camadas do vetor")
-    from src import arte, video
+def testar_assinatura_de_marca() -> None:
+    """O logotipo é opcional e sua ausência não pode derrubar a publicação."""
+    print("\nAssinatura de marca")
+    from src.config import carregar
+    from src import video
 
-    svg = (
-        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 200">'
-        '<rect width="100" height="200" fill="#1A1A2E"/>'
-        '<circle cx="50" cy="60" r="20" fill="#FF5A1F"/>'
-        '<rect x="20" y="120" width="60" height="20" fill="#FFD166"/>'
-        '<path d="M10 180 L90 180" stroke="#FF5A1F" stroke-width="4"/>'
-        "</svg>"
-    )
-    # Pedidos 4 passos, mas o SVG só tem 3 elementos além do fundo. O código
-    # limita a um passo por elemento — pedir mais produziria quadros idênticos
-    # e a animação travaria em vez de progredir.
-    passos = arte.camadas_cumulativas(svg, passos=4)
+    cfg = carregar()
+    v = cfg["video"]
+    TRABALHO.mkdir(parents=True, exist_ok=True)
+
     checar(
-        "número de passos é limitado à quantidade de elementos",
-        len(passos) == 3,
-        f"{len(passos)} passos para 3 elementos",
-    )
-    checar(
-        "cada passo acrescenta conteúdo ao anterior",
-        all(len(passos[i]) < len(passos[i + 1]) for i in range(len(passos) - 1)),
-    )
-    checar(
-        "o fundo aparece em todos os passos",
-        all('width="100"' in p for p in passos),
-        "senão a arte piscaria sobre transparência",
+        "config declara o caminho do logotipo",
+        bool(cfg["marca"].get("logo")),
+        str(cfg["marca"].get("logo")),
     )
 
-    try:
-        arte.camadas_cumulativas(
-            '<svg xmlns="http://www.w3.org/2000/svg"><rect width="10" height="10"/></svg>'
+    sem_logo = _texto_termina_em(video, "sem_logo", reserva=0)
+    com_logo = _texto_termina_em(video, "com_logo", reserva=140)
+    checar(
+        "texto sobe quando há logotipo, para não disputar a faixa",
+        com_logo < sem_logo,
+        f"{com_logo * 100:.0f}% contra {sem_logo * 100:.0f}%",
+    )
+    checar(
+        "texto continua dentro da área coberta pela interface",
+        max(com_logo, sem_logo) <= video.ZONA_SEGURA_BASE,
+    )
+
+    caminho_mockup = TRABALHO / "mockup.png"
+    if caminho_mockup.exists():
+        saida, _ = video.montar(
+            mockup=caminho_mockup,
+            destino=TRABALHO / "sem_marca.mp4",
+            gancho="Teste sem assinatura",
+            cta="Monte a sua",
+            produto="Capinha iPhone 15 Pro",
+            paleta=cfg["marca"]["paleta"],
+            largura=v["largura"],
+            altura=v["altura"],
+            fps=v["fps"],
+            duracao=v["duracao_segundos"],
+            zoom=v["fallback_zoom"],
+            api_key=None,
+            logo=None,
         )
-        checar("SVG simples demais é recusado, para cair no quadro único", False)
-    except ValueError:
-        checar("SVG simples demais é recusado, para cair no quadro único", True)
-
-    checar(
-        "camada de abertura não desenha o bloco inferior",
-        _texto_termina_em(video, "abertura") < 0.30,
-        "o CTA cairia em cima da arte na cena de montagem",
-    )
+        checar("vídeo é montado mesmo sem o arquivo de logotipo", saida.exists())
 
 
-def _texto_termina_em(video_mod, variante: str) -> float:
+def _texto_termina_em(video_mod, variante: str, reserva: int = 0) -> float:
     """Fração da altura onde o último pixel de texto aparece."""
     import numpy as np
     from PIL import Image
@@ -345,6 +347,7 @@ def _texto_termina_em(video_mod, variante: str) -> float:
         largura=v["largura"],
         altura=v["altura"],
         com_base=(variante != "abertura"),
+        reserva_base=reserva,
     )
     with Image.open(caminho) as img:
         pixels = np.array(img.convert("RGBA"))
@@ -497,7 +500,7 @@ def main() -> int:
         testar_selecao,
         testar_guardrails,
         testar_midia,
-        testar_animacao_em_camadas,
+        testar_assinatura_de_marca,
         testar_integracoes,
         testar_parsers_do_publicador,
         testar_credenciais_ausentes,

@@ -75,6 +75,11 @@ def _rodar(argumentos: list[str]) -> None:
         raise RuntimeError(f"FFmpeg falhou: {processo.stderr.strip()[:500]}")
 
 
+def _para_hex(valor: str) -> str:
+    """Cor no formato que o filtro `color` do FFmpeg aceita."""
+    return "0x" + valor.lstrip("#")
+
+
 def _hex_para_rgb(valor: str) -> tuple[int, int, int]:
     valor = valor.lstrip("#")
     return tuple(int(valor[i : i + 2], 16) for i in (0, 2, 4))  # type: ignore[return-value]
@@ -83,7 +88,6 @@ def _hex_para_rgb(valor: str) -> tuple[int, int, int]:
 def montar(
     *,
     mockup: Path,
-    arte: Path | None = None,
     destino: Path,
     gancho: str,
     cta: str,
@@ -97,6 +101,7 @@ def montar(
     modelo: str = "veo-3.1-fast-generate-preview",
     api_key: str | None = None,
     prompt_movimento: str = "",
+    logo: Path | None = None,
 ) -> tuple[Path, str]:
     """Produz o MP4 final. Devolve (caminho, origem) com origem 'ia' ou 'local'."""
     trabalho = destino.parent
@@ -150,45 +155,6 @@ def montar(
         altura=altura,
     )
 
-    # Vídeo em cenas, quando a arte é vetorial: a estrutura em camadas do SVG
-    # permite animar o desenho se montando antes de virar produto. Só vale para
-    # o caminho local — vídeo vindo da IA já tem movimento próprio.
-    if origem == "local" and arte is not None and arte.with_suffix(".svg").exists():
-        try:
-            from .arte import rasterizar_camadas
-
-            camadas = rasterizar_camadas(
-                arte.with_suffix(".svg"),
-                trabalho / "camadas",
-                tamanho=(512, 1024),
-                passos=10,
-            )
-            abertura = trabalho / "legenda_abertura.png"
-            _desenhar_legenda(
-                destino=abertura, gancho=gancho, cta=cta, produto=produto,
-                paleta=paleta, largura=largura, altura=altura, com_base=False,
-            )
-            _animar_cenas(
-                camadas=camadas,
-                mockup=mockup,
-                sobreposicao=sobreposicao,
-                sobreposicao_abertura=abertura,
-                destino=destino,
-                largura=largura,
-                altura=altura,
-                fps=fps,
-                duracao=duracao,
-                paleta=paleta,
-            )
-            log.info(
-                "Vídeo pronto: %s (%.1f MB, origem=cenas)",
-                destino.name,
-                destino.stat().st_size / 1024 / 1024,
-            )
-            return destino, "cenas"
-        except Exception as erro:
-            log.warning("Montagem em cenas falhou (%s); usando quadro único.", erro)
-
     _finalizar(
         base=entrada,
         filtro_base=filtro_base,
@@ -198,6 +164,10 @@ def montar(
         altura=altura,
         fps=fps,
         duracao=duracao,
+        logo=logo,
+        # Véu claro: o logotipo da marca é azul, desenhado para fundo
+        # claro. Sobre a cor secundária, escura, o contraste morria.
+        cor_veu=paleta.get("fundo", "#F7F7F9"),
     )
     log.info(
         "Vídeo pronto: %s (%.1f MB, origem=%s)",
@@ -304,193 +274,6 @@ def _uri_do_video(corpo: dict) -> str | None:
 
 # ---------------------------------------------------------------- Ken Burns
 
-
-def _animar_cenas(
-    *,
-    camadas: list[Path],
-    mockup: Path,
-    sobreposicao: Path,
-    sobreposicao_abertura: Path,
-    destino: Path,
-    largura: int,
-    altura: int,
-    fps: int,
-    duracao: int,
-    paleta: dict[str, str],
-) -> None:
-    """Vídeo em cenas, com a arte se montando antes de virar produto.
-
-    Um quadro parado com zoom lento é linguagem de banco de imagens, não de
-    TikTok. Como a arte já vem em camadas vetoriais, dá para animar de verdade
-    sem IA de vídeo nenhuma:
-
-        0,0 – 2,4 s   arte se monta, elemento por elemento
-        2,4 – 3,2 s   transição da arte para o produto
-        3,2 – 8,0 s   capinha com aproximação lenta
-
-    Os quadros são gerados aqui e canalizados direto para o FFmpeg como bytes
-    crus. Nada vai a disco, e a memória fica em um quadro por vez em vez de uma
-    sequência inteira de PNGs.
-    """
-    total = duracao * fps
-    fim_montagem = int(total * 0.30)
-    fim_transicao = int(total * 0.40)
-
-    fundo_cor = _hex_para_rgb(paleta.get("fundo", "#F7F7F9"))
-    escuro = _hex_para_rgb(paleta.get("secundaria", "#1A1A2E"))
-
-    # A arte é exibida menor que a tela, centralizada, para caber a moldura.
-    arte_l = int(largura * 0.62)
-    arte_a = int(arte_l * 2)
-    quadros_arte = []
-    for caminho in camadas:
-        with Image.open(caminho) as img:
-            quadros_arte.append(img.convert("RGB").resize((arte_l, arte_a), Image.LANCZOS))
-
-    with Image.open(mockup) as img:
-        base_mockup = img.convert("RGB").copy()
-    with Image.open(sobreposicao) as img:
-        legenda = img.convert("RGBA").copy()
-    with Image.open(sobreposicao_abertura) as img:
-        legenda_abertura = img.convert("RGBA").copy()
-
-    palco = Image.new("RGB", (largura, altura), fundo_cor)
-    for y in range(altura):
-        fracao = abs(y - altura / 2) / (altura / 2)
-        palco.paste(
-            tuple(int(fundo_cor[c] * (1 - 0.12 * fracao)) for c in range(3)),
-            (0, y, largura, y + 1),
-        )
-
-    fundo_cena = _palco_com_sombra(
-        palco, (arte_l, arte_a), escuro, largura, altura
-    )
-
-    processo = subprocess.Popen(
-        [
-            _ffmpeg(), "-hide_banner", "-loglevel", "error", "-y",
-            "-f", "rawvideo", "-pix_fmt", "rgb24",
-            "-s", f"{largura}x{altura}", "-r", str(fps), "-i", "-",
-            "-f", "lavfi", "-i", "anullsrc=channel_layout=stereo:sample_rate=44100",
-            "-map", "0:v", "-map", "1:a", "-t", str(duracao),
-            "-c:v", "libx264", "-preset", PRESET, "-crf", CRF,
-            "-x264-params", X264_ECONOMICO,
-            "-pix_fmt", "yuv420p", "-profile:v", "high", "-level", "4.0",
-            "-c:a", "aac", "-b:a", "128k", "-shortest",
-            "-movflags", "+faststart",
-            str(destino),
-        ],
-        stdin=subprocess.PIPE,
-    )
-
-    try:
-        for n in range(total):
-            if n < fim_montagem:
-                quadro = _cena_montagem(
-                    fundo_cena, quadros_arte, n / fim_montagem, largura, altura
-                )
-            elif n < fim_transicao:
-                avanco = (n - fim_montagem) / max(1, fim_transicao - fim_montagem)
-                quadro = Image.blend(
-                    _cena_montagem(fundo_cena, quadros_arte, 1.0, largura, altura),
-                    base_mockup,
-                    avanco,
-                )
-            else:
-                avanco = (n - fim_transicao) / max(1, total - fim_transicao)
-                quadro = _aproximar(base_mockup, avanco, largura, altura)
-
-            # Abertura mostra só o gancho: o bloco inferior cairia sobre a
-            # arte, que ocupa o centro. Produto e CTA entram junto com a
-            # capinha, que é onde fazem sentido.
-            camada_texto = legenda if n >= fim_transicao else legenda_abertura
-            forca = min(1.0, n / max(1, fps // 2))
-            if forca >= 1.0:
-                quadro.paste(camada_texto, (0, 0), camada_texto)
-            elif forca > 0:
-                suave = camada_texto.copy()
-                suave.putalpha(
-                    camada_texto.getchannel("A").point(lambda v: int(v * forca))
-                )
-                quadro.paste(suave, (0, 0), suave)
-
-            processo.stdin.write(quadro.tobytes())  # type: ignore[union-attr]
-    finally:
-        processo.stdin.close()  # type: ignore[union-attr]
-        processo.wait()
-
-    if processo.returncode != 0:
-        raise RuntimeError(f"FFmpeg falhou ao montar as cenas (código {processo.returncode})")
-    log.info("Vídeo em cenas montado (%d camadas de arte).", len(camadas))
-
-
-def _palco_com_sombra(
-    palco: Image.Image,
-    tamanho_arte: tuple[int, int],
-    borda: tuple[int, int, int],
-    largura: int,
-    altura: int,
-) -> Image.Image:
-    """Fundo da cena de abertura, com a sombra da arte já embutida.
-
-    A sombra é difusa, não um retângulo sólido deslocado — bloco de cor atrás
-    da arte lê como moldura preta, não como profundidade.
-
-    Calculada uma vez e reaproveitada em todos os quadros. O desfoque custava
-    58 ms, quase dois terços do tempo de montar um quadro, e era refeito a cada
-    um para uma sombra que muda de forma imperceptível ao longo da cena.
-    """
-    largura_arte, altura_arte = tamanho_arte
-    x = (largura - largura_arte) // 2
-    y = (altura - altura_arte) // 2
-
-    manta = Image.new("RGBA", (largura, altura), (0, 0, 0, 0))
-    ImageDraw.Draw(manta).rounded_rectangle(
-        [x + 8, y + 16, x + largura_arte + 8, y + altura_arte + 16],
-        radius=18,
-        fill=(*borda, 120),
-    )
-    return Image.alpha_composite(
-        palco.convert("RGBA"), manta.filter(ImageFilter.GaussianBlur(22))
-    ).convert("RGB")
-
-
-def _cena_montagem(
-    fundo: Image.Image,
-    camadas: list[Image.Image],
-    avanco: float,
-    largura: int,
-    altura: int,
-) -> Image.Image:
-    """Arte crescendo e ganhando elementos, centralizada no palco."""
-    indice = min(len(camadas) - 1, int(avanco * len(camadas)))
-    arte = camadas[indice]
-    escala = 0.92 + 0.08 * min(1.0, avanco * 1.2)
-    largura_arte = max(2, int(arte.width * escala))
-    altura_arte = max(2, int(arte.height * escala))
-
-    quadro = fundo.copy()
-    quadro.paste(
-        arte.resize((largura_arte, altura_arte), Image.BILINEAR),
-        ((largura - largura_arte) // 2, (altura - altura_arte) // 2),
-    )
-    return quadro
-
-
-def _aproximar(base: Image.Image, avanco: float, largura: int, altura: int) -> Image.Image:
-    """Aproximação lenta sobre o produto, equivalente ao Ken Burns."""
-    zoom = 1.0 + 0.14 * avanco
-    corte_l = int(largura / zoom)
-    corte_a = int(altura / zoom)
-    x = (largura - corte_l) // 2
-    y = (altura - corte_a) // 2
-    # BICUBIC e não LANCZOS: numa aproximação lenta sobre arte já suave a
-    # diferença é imperceptível, e LANCZOS custava três vezes mais por quadro.
-    return base.crop((x, y, x + corte_l, y + corte_a)).resize(
-        (largura, altura), Image.BICUBIC
-    )
-
-
 def _ken_burns(largura: int, altura: int, fps: int, duracao: int, zoom: float) -> str:
     """Cadeia de filtros do zoom lento sobre o mockup parado.
 
@@ -559,6 +342,7 @@ def _desenhar_legenda(
     largura: int,
     altura: int,
     com_base: bool = True,
+    reserva_base: int = 0,
 ) -> Path:
     """Camada de texto. `com_base=False` desenha só o gancho, sem produto e CTA.
 
@@ -611,7 +395,9 @@ def _desenhar_legenda(
     # O +24 cobre a descida dos glifos abaixo da última linha de base: sem ele
     # o bloco encosta no limite e letras como g e q ultrapassam.
     altura_bloco = 66 + len(linhas_cta) * 74 + 24
-    base_y = int(altura * ZONA_SEGURA_BASE) - altura_bloco
+    # `reserva_base` é o espaço do logotipo, quando existe: o texto sobe para
+    # não disputar a faixa com a assinatura de marca.
+    base_y = int(altura * ZONA_SEGURA_BASE) - reserva_base - altura_bloco
     pincel.text(
         (margem, base_y), produto, font=fonte_produto, fill=(*primaria, 255)
     )
@@ -641,6 +427,8 @@ def _finalizar(
     altura: int,
     fps: int,
     duracao: int,
+    logo: Path | None = None,
+    cor_veu: str = "#F7F7F9",
 ) -> None:
     """Única codificação do pipeline: movimento, legenda e normalização.
 
@@ -655,16 +443,63 @@ def _finalizar(
     tem_audio = _tem_audio(base)
     argumentos = [
         "-i", str(base),
-        "-i", str(sobreposicao),
+        # `-loop 1` também na legenda: sem ele a camada existe só em t=0, e um
+        # fade programado para o fim não teria quadros onde acontecer.
+        "-loop", "1", "-i", str(sobreposicao),
     ]
+
+    # Índices dos inputs são posicionais no FFmpeg, então precisam ser
+    # calculados: o logotipo é opcional e a faixa silenciosa só entra quando a
+    # origem não tem áudio.
+    proximo = 2
+    indice_logo = None
+    if logo is not None:
+        # `-loop 1` é obrigatório: uma imagem parada entra com um único quadro
+        # em t=0, e o fade programado para os últimos segundos nunca chegaria a
+        # acontecer. O overlay repetiria o quadro inicial, que está com alfa
+        # zero — o logotipo simplesmente não apareceria.
+        argumentos += ["-loop", "1", "-i", str(logo)]
+        indice_logo = proximo
+        proximo += 1
+    indice_audio = None
     if not tem_audio:
-        argumentos += ["-f", "lavfi", "-i", "anullsrc=channel_layout=stereo:sample_rate=44100"]
+        argumentos += [
+            "-f", "lavfi",
+            "-i", "anullsrc=channel_layout=stereo:sample_rate=44100",
+        ]
+        indice_audio = proximo
+
+    if indice_logo is None:
+        grafo = f"{filtro_base}[bg][1:v]overlay=0:0:format=auto[v]"
+    else:
+        # Encerramento de marca. A primeira tentativa colocou o logotipo sobre
+        # o produto, no rodapé — e ele lia como se estivesse impresso na
+        # capinha, porque o produto ocupa quase toda a altura útil e não sobra
+        # faixa livre. Aqui a marca fecha o vídeo: um véu claro entra em fade
+        # sobre os últimos segundos, deixando o produto visível por trás, e o
+        # logotipo aparece centralizado.
+        entrada = max(0.0, duracao - 1.7)
+        largura_logo = int(largura * 0.42)
+        # A legenda sai de cena junto com a entrada do véu: texto branco sobre
+        # fundo claro fica ilegível e lê como resíduo, não como camada.
+        grafo = (
+            f"{filtro_base}"
+            f"[1:v]format=rgba,fade=t=out:st={entrada:.2f}:d=0.5:alpha=1[texto];"
+            f"[bg][texto]overlay=0:0:format=auto[comtexto];"
+            f"color=c={_para_hex(cor_veu)}:s={largura}x{altura}:"
+            f"r={fps}:d={duracao},format=rgba,colorchannelmixer=aa=0.90,"
+            f"fade=t=in:st={entrada:.2f}:d=0.6:alpha=1[veu];"
+            f"[comtexto][veu]overlay=0:0:format=auto[fechado];"
+            f"[{indice_logo}:v]format=rgba,scale={largura_logo}:-1,"
+            f"fade=t=in:st={entrada + 0.25:.2f}:d=0.6:alpha=1[marca];"
+            f"[fechado][marca]overlay=(W-w)/2:(H-h)/2:format=auto[v]"
+        )
 
     argumentos += [
         "-filter_complex",
-        f"{filtro_base}[bg][1:v]overlay=0:0:format=auto[v]",
+        grafo,
         "-map", "[v]",
-        "-map", "0:a?" if tem_audio else "2:a",
+        "-map", "0:a?" if tem_audio else f"{indice_audio}:a",
         "-t", str(duracao),
         "-c:v", "libx264", "-preset", PRESET, "-crf", CRF,
         "-x264-params", X264_ECONOMICO,

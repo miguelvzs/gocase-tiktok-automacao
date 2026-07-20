@@ -50,17 +50,15 @@ publicação no TikTok + confirmação de status
 relatório da execução
 ```
 
-O vídeo não é um quadro parado com zoom. A arte é gerada em vetor, com os
-elementos separados, então a montagem dela vira a própria narrativa:
+O vídeo abre direto no produto, com aproximação lenta, e fecha com a assinatura
+da marca: nos últimos segundos o texto sai de cena, um véu claro entra em fade
+deixando a capinha visível por trás, e o logotipo aparece centralizado.
 
-```
-0,0 – 2,4 s   a arte se desenha, elemento por elemento
-2,4 – 3,2 s   a arte vira produto
-3,2 – 8,0 s   a capinha, com aproximação lenta
-```
-
-Isso importa porque um quadro estático com zoom é linguagem de banco de
-imagens, não de TikTok — e a plataforma premia corte e movimento.
+Uma versão anterior abria com a arte se desenhando elemento por elemento,
+aproveitando a estrutura em camadas do vetor. Era tecnicamente interessante e
+foi removida: atrasava o produto em dois segundos e meio, e num formato onde a
+disputa é pelo primeiro segundo, adiar o que se vende custa mais do que a
+animação entrega.
 
 O operador abre o fluxo no n8n e clica em executar. Ou habilita o gatilho
 agendado e não abre mais.
@@ -238,17 +236,13 @@ A arte tem três caminhos, tentados em ordem:
 | 2 | Vetor desenhado pela IA de texto | acerta o tema; SVG escala sem perda e separa cores | `vetor_ia` |
 | 3 | Composição geométrica local | sempre disponível, na paleta da marca | `local` |
 
-O vídeo também tem três, e a ordem não é a mesma da arte:
+O vídeo tem dois: animação por IA sobre o mockup, ou aproximação lenta em
+FFmpeg sobre o mesmo mockup.
 
-| # | Caminho | O que entrega | `etapas.video` |
-|---|---|---|---|
-| 1 | Animação por IA sobre o mockup | movimento de câmera realista | `ia` |
-| 2 | Montagem em cenas a partir das camadas do vetor | narrativa: arte se monta, vira produto | `cenas` |
-| 3 | Ken Burns em FFmpeg sobre o mockup | aproximação lenta, sempre disponível | `local` |
-
-O caminho 2 só existe porque a arte veio em vetor. Achatar o SVG num PNG
-descartaria a estrutura em elementos — que é exatamente o que permite animar a
-montagem sem IA de vídeo, sem chave e sem cota.
+O logotipo do encerramento segue a mesma regra: o arquivo não é versionado —
+é material de marca de terceiro e o repositório é público. Sem ele o vídeo é
+montado sem assinatura e o relatório registra `logo: ausente`, em vez de a
+publicação falhar por causa de um ativo decorativo.
 
 **Isto não é hipótese — foi exercitado.** O plano gratuito do provedor de
 imagem concede `limit: 0` para geração de imagem e de vídeo; a cota exige

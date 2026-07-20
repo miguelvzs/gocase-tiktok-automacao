@@ -145,10 +145,19 @@ def executar_pipeline(
     cronometrar("mockup")
 
     # 5. Vídeo 9:16 na especificação da TikTok
+    #
+    # O logotipo é opcional de propósito: é material de marca de terceiro e o
+    # repositório é público, então o arquivo não é versionado. Sem ele o vídeo
+    # sai sem assinatura, e o relatório registra qual foi o caso.
+    caminho_logo = RAIZ / str(cfg["marca"].get("logo") or "")
+    tem_logo = caminho_logo.is_file()
+    relatorio["etapas"]["logo"] = "aplicado" if tem_logo else "ausente"
+    if not tem_logo:
+        log.info("Logotipo não encontrado em %s; vídeo sem assinatura.", caminho_logo)
+
     avisar("video", "Montando o vídeo vertical")
     caminho_video, origem_video = video.montar(
         mockup=caminho_mockup,
-        arte=caminho_arte,
         destino=destino / "post.mp4",
         gancho=pacote["gancho"],
         cta=pacote["cta"],
@@ -162,6 +171,7 @@ def executar_pipeline(
         modelo=cfg["ia"]["modelo_video"],
         api_key=chave_video,
         prompt_movimento=pacote.get("movimento", ""),
+        logo=caminho_logo if tem_logo else None,
     )
     relatorio["etapas"]["video"] = origem_video
     relatorio["arquivos"] = {

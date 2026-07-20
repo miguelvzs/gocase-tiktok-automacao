@@ -21,6 +21,7 @@ PADRAO: dict[str, Any] = {
     "marca": {
         "nome": "GoCase",
         "voz": "Direta, jovem e brasileira.",
+        "logo": "marca/gocase.png",
         "paleta": {
             "primaria": "#FF5A1F",
             "secundaria": "#1A1A2E",

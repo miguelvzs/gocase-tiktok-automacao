@@ -6,3 +6,6 @@ output/
 venv/
 .DS_Store
 .claude/
+marca/*.png
+marca/*.jpg
+marca/*.svg
