@@ -97,7 +97,6 @@ def gerar(
             _gerar_vetor(
                 conceito=conceito,
                 destino=destino,
-                paleta=paleta,
                 api_key=chave_anthropic,
                 modelo=modelo_texto,
                 tamanho=tamanho,
@@ -191,6 +190,19 @@ def _esquema_svg(largura: int, altura: int) -> dict:
     return {
         "type": "object",
         "properties": {
+            # Vem antes do SVG de propósito. O modelo escreve a ideia primeiro e
+            # desenha depois, com a decisão já tomada — em vez de improvisar a
+            # composição forma a forma. Custa algumas centenas de tokens e
+            # nenhuma ida extra à rede.
+            "conceito": {
+                "type": "string",
+                "description": (
+                    "Antes de desenhar, descreva em uma ou duas frases a ideia "
+                    "visual: qual é o elemento principal, onde ele fica no eixo "
+                    "vertical, o que ocupa o resto do quadro e quais são as três "
+                    "ou quatro cores escolhidas para este tema, em hexadecimal."
+                ),
+            },
             "svg": {
                 "type": "string",
                 "description": (
@@ -198,48 +210,97 @@ def _esquema_svg(largura: int, altura: int) -> dict:
                     f"terminando em '</svg>', com viewBox='0 0 {largura} {altura}'. "
                     "Sem texto, sem fontes, sem imagens externas, sem script. "
                     "Apenas formas vetoriais: path, circle, ellipse, rect, "
-                    "polygon, line e linearGradient."
+                    "polygon, polyline, line, g, linearGradient e "
+                    "radialGradient. Atributos de acabamento permitidos: "
+                    "fill-opacity, stroke-opacity, stroke-width, "
+                    "stroke-linecap, stroke-dasharray e transform."
                 ),
             }
         },
-        "required": ["svg"],
+        "required": ["conceito", "svg"],
         "additionalProperties": False,
     }
 
-# Elementos e atributos que nunca devem aparecer numa arte gerada. `image` e
-# href externo fariam o rasterizador buscar recurso remoto; `script` e
-# `foreignObject` são superfície de execução. Não confiamos na instrução do
-# prompt para isso — verificamos.
-TAGS_PROIBIDAS = {"script", "image", "foreignobject", "use", "iframe"}
+# Elementos que nunca devem aparecer numa arte gerada, por dois motivos
+# distintos.
+#
+# Segurança: `image` e href externo fariam o rasterizador buscar recurso remoto;
+# `script`, `foreignObject`, `use` e `iframe` são superfície de execução.
+#
+# Silêncio: `clipPath` e `pattern` são pior que proibidos — o rasterizador os
+# ignora sem erro. Um recorte que some deixa o retângulo cobrindo a arte
+# inteira, e o resultado é uma peça errada entregue como se estivesse certa.
+# Medido: ambos produzem uma única cor chapada. Recusar em voz alta é melhor do
+# que aceitar em silêncio e publicar o defeito.
+TAGS_PROIBIDAS = {
+    "script",
+    "image",
+    "foreignobject",
+    "use",
+    "iframe",
+    "clippath",
+    "pattern",
+    "filter",
+    "mask",
+}
 
 
 def _gerar_vetor(
     *,
     conceito: str,
     destino: Path,
-    paleta: dict[str, str],
     api_key: str,
     modelo: str,
     tamanho: tuple[int, int],
 ) -> None:
+    """Desenha a arte em vetor.
+
+    Não recebe paleta: as cores saem do tema, não da marca. Ver o bloco PALETA
+    no prompt do sistema.
+    """
     import anthropic
 
     largura, altura = tamanho
-    cores = ", ".join(f"{valor}" for valor in paleta.values())
     sistema = (
         "Você é ilustrador vetorial. Produz arte para impressão na traseira de "
-        "uma capinha de celular.\n\n"
+        "uma capinha de celular — o produto que o cliente compra e carrega.\n\n"
         f"FORMATO: retrato alto, {largura}x{altura} (proporção "
         f"{largura / altura:.2f}:1). Componha para essa altura — distribua os "
         "elementos ao longo do eixo vertical em vez de concentrá-los no centro. "
         "A composição preenche a tela inteira, sem margem vazia.\n\n"
-        f"PALETA — use exclusivamente estas cores e tons derivados delas "
-        f"(mais claro, mais escuro, mais transparente): {cores}. "
-        "Não introduza nenhum matiz fora desta lista. Nada de verde, azul, "
-        "roxo ou rosa se não estiverem acima.\n\n"
+        # A paleta sai do TEMA, não da marca. Antes o prompt impunha as quatro
+        # cores da GoCase a toda arte, e o resultado era que capinha botânica,
+        # gamer neon e festa junina saíam todas em laranja e azul-marinho. A
+        # identidade da marca pertence ao vídeo — texto, logotipo, chamada —,
+        # não ao produto: quem compra uma capinha botânica quer verde.
+        "PALETA: escolha de três a cinco cores que pertençam ao próprio tema, "
+        "não a uma marca. Uma tendência botânica pede verdes e terrosos; uma "
+        "gamer pede neon sobre escuro; uma junina pede fogo sobre noite. "
+        "Declare as cores no campo 'conceito' antes de desenhar e depois use "
+        "apenas elas e tons derivados. Uma cor deve dominar, outra contrastar "
+        "com força e as demais apoiar — evite quatro cores com o mesmo peso.\n\n"
+        "DIREÇÃO DE ARTE — o que separa ilustração de clipart:\n"
+        "- Um ponto focal claro, ocupando entre um terço e metade da altura. "
+        "Os demais elementos são coadjuvantes e menores.\n"
+        "- Escala variada: elementos grandes ao fundo, pequenos à frente. "
+        "Repetir a mesma forma no mesmo tamanho é o que faz parecer adesivo.\n"
+        "- Profundidade por camadas: um plano de fundo, um intermediário e um "
+        "primeiro plano, com sobreposição real entre eles.\n"
+        "- Gradiente onde há volume ou luz, chapado onde há recorte. Não "
+        "aplique gradiente em tudo nem em nada.\n"
+        "- Assimetria. Centralizar tudo no eixo é a saída mais previsível.\n"
+        "- Densidade desigual: uma região respira, outra concentra detalhe.\n\n"
         f"TÉCNICO: viewBox='0 0 {largura} {altura}'. Um retângulo de fundo "
-        "cobrindo tudo. Sem texto, sem fonte, sem imagem externa, sem script. "
-        "Só formas.\n\n"
+        "cobrindo tudo. Sem texto, sem fonte, sem imagem externa, sem script.\n"
+        "Disponíveis: path, circle, ellipse, rect, polygon, polyline, line, g, "
+        "linearGradient, radialGradient, e os atributos fill-opacity, "
+        "stroke-opacity, stroke-width, stroke-linecap, stroke-dasharray e "
+        "transform. Use transparência para sobrepor planos e radialGradient "
+        "para luz e volume.\n"
+        # Ambos são aceitos pelo interpretador e descartados no desenho, o que
+        # produziria uma peça errada sem nenhum erro. Medido, não suposto.
+        "NUNCA use clipPath, mask, pattern ou filter: o rasterizador os ignora "
+        "em silêncio e a arte sai quebrada.\n\n"
         "O terço superior fica atrás do módulo de câmera — evite detalhe fino "
         "ali. O terço inferior é a área mais visível."
     )
@@ -263,14 +324,50 @@ def _gerar_vetor(
     texto = next((b.text for b in resposta.content if b.type == "text"), "")
     import json
 
-    svg = json.loads(texto)["svg"]
+    pacote = json.loads(texto)
+    svg = _sanear_cores(pacote["svg"])
     _conferir_svg(svg)
     _rasterizar(svg, destino, tamanho)
+    log.info("Conceito da arte: %s", pacote.get("conceito", "")[:200])
     log.info(
         "Vetor gerado (%d tokens, %d bytes de SVG).",
         resposta.usage.output_tokens,
         len(svg),
     )
+
+
+# O modelo produz, de vez em quando, uma cor partida por espaço — "#f5 eee6".
+# O rasterizador morre com "invalid literal for int() with base 16: 'f5 eee'",
+# mensagem que não menciona cor, e a peça inteira é descartada por causa de um
+# caractere.
+#
+# O reparo trabalha sobre o VALOR COMPLETO do atributo, nunca sobre texto solto.
+# Uma primeira versão casava qualquer sequência hexadecimal separada por espaço
+# e, em "#ab cdefgh", juntava "ab"+"cdef" num "#abcdef" válido deixando "gh"
+# sobrando: transformava uma cor quebrada numa cor ERRADA com aparência de
+# certa. Exigir que o valor inteiro vire hexadecimal válido elimina isso — se
+# não virar, nada é tocado e a conferência abaixo recusa em voz alta.
+_NOMES_DE_COR = "fill|stroke|stop-color|flood-color"
+_COR_VALIDA = re.compile(r"^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$")
+_COR_COMO_ATRIBUTO = re.compile(rf'({_NOMES_DE_COR})(\s*=\s*")(#[^"]*)(")')
+_COR_COMO_ESTILO = re.compile(rf'({_NOMES_DE_COR})(\s*:\s*)(#[^;"\']*)')
+
+# Usado só para conferir; aceita as duas formas acima.
+_ATRIBUTO_DE_COR = re.compile(rf"(?:{_NOMES_DE_COR})\s*[:=]\s*[\"']?\s*(#[^\"';\s>)]*)")
+
+
+def _sanear_cores(svg: str) -> str:
+    """Junta cores hexadecimais que vieram partidas por espaço."""
+
+    def corrigir(achado: re.Match[str]) -> str:
+        partes = list(achado.groups())
+        junto = re.sub(r"\s+", "", partes[2])
+        if not _COR_VALIDA.match(junto):
+            return achado.group(0)  # não dá para reparar sem inventar
+        partes[2] = junto
+        return "".join(partes)
+
+    return _COR_COMO_ESTILO.sub(corrigir, _COR_COMO_ATRIBUTO.sub(corrigir, svg))
 
 
 def _conferir_svg(svg: str) -> None:
@@ -288,6 +385,12 @@ def _conferir_svg(svg: str) -> None:
             raise ValueError(f"SVG contém elemento não permitido: <{tag}>")
     if re.search(r'(xlink:)?href\s*=\s*["\']\s*(https?:|//|file:)', svg, re.I):
         raise ValueError("SVG referencia recurso externo")
+
+    # Depois do saneamento, uma cor ainda quebrada vira erro legível aqui em vez
+    # de estourar lá dentro do rasterizador como um problema de conversão.
+    for cor in _ATRIBUTO_DE_COR.findall(svg):
+        if not _COR_VALIDA.match(cor):
+            raise ValueError(f"SVG traz cor hexadecimal inválida: {cor!r}")
 
 
 def _rasterizar(svg: str, destino: Path, tamanho: tuple[int, int]) -> None:

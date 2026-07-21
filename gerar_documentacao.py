@@ -680,7 +680,8 @@ def conteudo() -> list:
             "configuração, fora do código:"
         ),
         *itens(
-            "<b>Voz e paleta da marca</b> — trocar a paleta repinta todo o material gerado.",
+            "<b>Voz e paleta da marca</b> — governam o vídeo: texto, chamada e "
+            "assinatura. A arte impressa segue a paleta do próprio tema.",
             "<b>Proibições</b> — a lista que as verificações de marca conferem.",
             "<b>Catálogo de produtos</b> — SKU, nome, linha e área de impressão real.",
             "<b>Sinais de tendência</b> — tema e público de cada gatilho.",

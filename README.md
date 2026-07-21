@@ -151,7 +151,7 @@ em instruções acionáveis.
 | Tecnologia | Papel |
 |---|---|
 | **Claude (Anthropic)** | Escreve o conteúdo — gancho, legenda, CTA, hashtags — com a voz da marca e as proibições do catálogo. Formato garantido por JSON Schema, não por instrução no prompt. |
-| **Claude (Anthropic)** | Desenha a arte da capinha em **SVG**, a partir da tendência, do público e do produto. Paleta da marca imposta no prompt do sistema. |
+| **Claude (Anthropic)** | Desenha a arte da capinha em **SVG**, a partir da tendência, do público e do produto. Escolhe a paleta pelo tema e declara o conceito visual antes de desenhar. |
 | **Google Gemini** | Caminho preferencial para a arte quando há cota: gerador de imagem, com maior alcance visual (textura, pintura, grão). Opcional. |
 | **Google Veo** | Caminho preferencial para o movimento do vídeo quando há cota. Opcional e desligado por padrão, por custo. |
 
@@ -481,7 +481,8 @@ As exceções estão marcadas.
 
 Tudo que um time de marketing ajustaria vive no `config.yaml`, fora do código:
 
-- **Voz e paleta da marca** — trocar a paleta repinta todo o material gerado
+- **Voz e paleta da marca** — governam o vídeo (texto, chamada, assinatura). A
+  arte impressa segue a paleta do tema, não a da marca
 - **Proibições** — a lista que os guardrails verificam
 - **Catálogo de produtos** — SKU, nome, linha e área de impressão real
 - **Sinais de tendência** — tema e público de cada gatilho

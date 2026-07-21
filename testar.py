@@ -281,6 +281,75 @@ def testar_midia() -> None:
 # ------------------------------------------------------------------ n8n e API
 
 
+def testar_saneamento_do_svg() -> None:
+    """Defesas do SVG vindo da IA: cor partida e tags que somem em silêncio."""
+    print("\nSaneamento do SVG gerado")
+    from src import arte
+
+    def envolver(corpo: str) -> str:
+        return (
+            '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">'
+            f"{corpo}</svg>"
+        )
+
+    # Uma cor partida por espaço matava a arte inteira com "invalid literal for
+    # int() with base 16" — mensagem que nem menciona cor. Agora é reparada.
+    quebrado = envolver('<rect width="100" height="100" fill="#f5 eee6"/>')
+    checar(
+        "cor hexadecimal partida por espaço é remendada",
+        '#f5eee6' in arte._sanear_cores(quebrado),
+        arte._sanear_cores(quebrado)[-40:],
+    )
+    # Uma versão anterior juntava "ab"+"cdef" aqui e deixava "gh" sobrando,
+    # criando uma cor errada com aparência de válida. O valor inteiro precisa
+    # virar hexadecimal, senão nada é tocado.
+    intacto = envolver('<rect fill="#ab cdefgh"/>')
+    checar(
+        "valor que não vira hexadecimal inteiro não é remendado",
+        arte._sanear_cores(intacto) == intacto,
+    )
+    checar(
+        "cor partida dentro de style= também é remendada",
+        "#f5eee6" in arte._sanear_cores(envolver('<rect style="fill:#f5 eee6"/>')),
+    )
+
+    # clipPath, mask, pattern e filter são aceitos pelo interpretador e
+    # descartados no desenho: a peça sairia errada sem nenhum erro.
+    for tag, corpo in (
+        ("clipPath", '<defs><clipPath id="c"><circle r="9"/></clipPath></defs>'),
+        ("pattern", '<defs><pattern id="p"><circle r="3"/></pattern></defs>'),
+        ("mask", '<defs><mask id="m"><rect width="9" height="9"/></mask></defs>'),
+        ("script", "<script>alert(1)</script>"),
+    ):
+        try:
+            arte._conferir_svg(envolver(corpo))
+            passou = False
+        except ValueError:
+            passou = True
+        checar(f"<{tag}> é recusado", passou)
+
+    try:
+        arte._conferir_svg(envolver('<rect fill="#zz00gg"/>'))
+        legivel = False
+    except ValueError as erro:
+        legivel = "cor" in str(erro).lower()
+    checar("cor inválida vira erro que diz ser cor", legivel)
+
+    checar(
+        "SVG saudável com os recursos novos passa",
+        arte._conferir_svg(
+            envolver(
+                '<defs><radialGradient id="r"><stop offset="0" stop-color="#ffd166"/>'
+                '</radialGradient></defs>'
+                '<rect width="100" height="100" fill="url(#r)" fill-opacity="0.6"/>'
+                '<g transform="rotate(12 50 50)"><path d="M10 10 L90 90" '
+                'stroke="#1a1a2e" stroke-dasharray="4 2"/></g>'
+            )
+        )
+        is None,
+    )
+
+
 def testar_fonte_com_acentos() -> None:
     """A fonte precisa desenhar acentos no ambiente publicado, não só aqui.
 
@@ -542,6 +611,7 @@ def main() -> int:
         testar_selecao,
         testar_guardrails,
         testar_midia,
+        testar_saneamento_do_svg,
         testar_fonte_com_acentos,
         testar_assinatura_de_marca,
         testar_integracoes,
