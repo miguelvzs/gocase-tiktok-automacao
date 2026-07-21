@@ -41,7 +41,7 @@
             {
               "id": "c1",
               "name": "api_url",
-              "value": "https://radar-tendencia-gocase.onrender.com",
+              "value": "https://gocase-tiktok-automacao.fly.dev",
               "type": "string"
             },
             {
@@ -107,7 +107,7 @@
     },
     {
       "parameters": {
-        "amount": 15,
+        "amount": 10,
         "unit": "seconds"
       },
       "id": "a1000000-0000-4000-8000-000000000005",
@@ -333,7 +333,7 @@
       "parameters": {
         "url": "={{ $json.api_url }}/",
         "options": {
-          "timeout": 120000,
+          "timeout": 60000,
           "response": {
             "response": {
               "neverError": true

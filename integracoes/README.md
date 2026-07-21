@@ -57,7 +57,7 @@ estabelecido pela própria referência, não um contorno.
 
 ## Contrato da API
 
-Base: `https://radar-tendencia-gocase.onrender.com`. Tudo é HTTP + JSON, sem SDK.
+Base: `https://gocase-tiktok-automacao.fly.dev`. Tudo é HTTP + JSON, sem SDK.
 
 ### `POST /publicar`
 
