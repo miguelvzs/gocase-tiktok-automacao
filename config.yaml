@@ -120,17 +120,25 @@ sinais:
     tema: "traço de mangá e ação em velocidade"
     publico: "16-26, anime e cultura pop"
     estetica: >-
-      Linhas de velocidade radiais convergindo, retículas de meio-tom em pontos
-      grandes, contornos pretos grossos, faíscas e estrelas de impacto, poucas
-      cores chapadas com uma de destaque.
+      Preto e branco dominando o quadro, com UMA única cor de destaque usada com
+      parcimônia. Cinza feito só por retícula de meio-tom, com pontos que mudam
+      de tamanho para simular gradação. Linhas de velocidade finas e paralelas
+      correndo em diagonal, afinando nas pontas. Traço de pincel com espessura
+      variável, grosso no começo e fino no fim. Composição em diagonal forte,
+      nunca centralizada. Nada de estrelas de impacto, explosões amarelas ou
+      raios coloridos — isso é quadrinho americano, não mangá.
 
   - id: grafite-urbano
     tema: "grafite e spray de rua"
     publico: "17-28, streetwear"
     estetica: >-
-      Manchas de spray com borda difusa, respingos e escorridos, camadas
-      sobrepostas com transparência, formas abstratas em movimento diagonal,
-      textura de concreto ao fundo.
+      Fitas largas entrelaçadas terminando em ponta de seta, no espírito do
+      wildstyle, desenhadas como formas fechadas — nunca como texto. Cada fita
+      leva contorno preto bem grosso, preenchimento chapado e um risco branco de
+      brilho no canto superior. Tinta escorrendo em gotas alongadas a partir das
+      bordas de baixo. Respingos finos de spray espalhados e halo difuso ao
+      redor das formas. Muro de concreto cinza ao fundo, com manchas e emendas.
+      O contorno preto é obrigatório: sem ele vira mancha colorida, não grafite.
 
   - id: verao-tropical
     tema: "verão tropical e fruta gelada"

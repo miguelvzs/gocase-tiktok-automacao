@@ -241,6 +241,14 @@ TAGS_PROIBIDAS = {
     "pattern",
     "filter",
     "mask",
+    # Texto na arte impressa sempre foi proibido no prompt, mas nada conferia.
+    # A brecha ficou perigosa quando a estética do grafite passou a pedir formas
+    # entrelaçadas em espírito de letra: o caminho curto para o modelo é emitir
+    # <text>, que dependeria de uma fonte do sistema — a mesma ausência que já
+    # apagou os acentos do vídeo uma vez.
+    "text",
+    "tspan",
+    "textpath",
 }
 
 # `use` sai da lista de proibidos e ganha regra própria.

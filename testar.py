@@ -321,6 +321,7 @@ def testar_saneamento_do_svg() -> None:
         ("mask", '<defs><mask id="m"><rect width="9" height="9"/></mask></defs>'),
         ("script", "<script>alert(1)</script>"),
         ("use externo", '<use href="https://exemplo.com/x.svg#a"/>'),
+        ("text", '<text x="10" y="10">GOCASE</text>'),
     ):
         try:
             arte._conferir_svg(envolver(corpo))
