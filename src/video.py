@@ -318,15 +318,15 @@ def _ken_burns(largura: int, altura: int, fps: int, duracao: int, zoom: float) -
     existe `-loop 1` na entrada. O loop fazia o demuxer bufferizar e custava
     ~150 MB a mais para produzir exatamente o mesmo vídeo.
 
-    O `scale` antes do zoom evita ampliar pixels já renderizados. O fator é 1,5
-    porque só precisa cobrir o zoom máximo (1,18) com folga; dobrar a resolução
-    quadruplicaria o buffer de quadro sem ganho de nitidez.
+    Não há pré-escalonamento antes do zoom. Ele existia para evitar ampliar
+    pixels já renderizados, mas processar 1620x2880 dobra o trabalho por quadro
+    — e o serviço codifica com uma thread só, num processador compartilhado, o
+    que torna cada pixel caro. Com zoom máximo de 1,18 a perda de nitidez é
+    imperceptível sobre arte vetorial, que já é suave.
     """
     quadros = duracao * fps
     passo = (zoom - 1.0) / quadros
-    fator = 1.5
     return (
-        f"scale={int(largura * fator)}:{int(altura * fator)},"
         f"zoompan=z='min(zoom+{passo:.6f},{zoom})'"
         f":x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)'"
         f":d={quadros}:s={largura}x{altura}:fps={fps}"
@@ -504,24 +504,21 @@ def _finalizar(
         # Encerramento de marca. A primeira tentativa colocou o logotipo sobre
         # o produto, no rodapé — e ele lia como se estivesse impresso na
         # capinha, porque o produto ocupa quase toda a altura útil e não sobra
-        # faixa livre. Aqui a marca fecha o vídeo: um véu claro entra em fade
-        # sobre os últimos segundos, deixando o produto visível por trás, e o
-        # logotipo aparece centralizado.
+        # faixa livre. Aqui a marca fecha o vídeo.
+        #
+        # O véu é feito com `fade` para a cor, não com uma fonte de cor
+        # sobreposta: a fonte gerava um vídeo RGBA inteiro e exigia um terceiro
+        # overlay de tela cheia. Mistura alfa de tela cheia é cara quando se
+        # codifica com uma thread só. O texto some junto, sem precisar do
+        # próprio fade.
         entrada = max(0.0, duracao - 1.7)
         largura_logo = int(largura * 0.42)
-        # A legenda sai de cena junto com a entrada do véu: texto branco sobre
-        # fundo claro fica ilegível e lê como resíduo, não como camada.
         grafo = (
             f"{filtro_base}"
-            f"[1:v]{REPETIR_QUADRO},format=rgba,"
-            f"fade=t=out:st={entrada:.2f}:d=0.5:alpha=1[texto];"
-            f"[bg][texto]overlay=0:0:format=auto[comtexto];"
-            f"color=c={_para_hex(cor_veu)}:s={largura}x{altura}:"
-            f"r={fps}:d={duracao},format=rgba,colorchannelmixer=aa=0.90,"
-            f"fade=t=in:st={entrada:.2f}:d=0.6:alpha=1[veu];"
-            f"[comtexto][veu]overlay=0:0:format=auto[fechado];"
+            f"[bg][1:v]overlay=0:0:format=auto,"
+            f"fade=t=out:st={entrada:.2f}:d=0.7:color={_para_hex(cor_veu)}[fechado];"
             f"[{indice_logo}:v]{REPETIR_QUADRO},format=rgba,scale={largura_logo}:-1,"
-            f"fade=t=in:st={entrada + 0.25:.2f}:d=0.6:alpha=1[marca];"
+            f"fade=t=in:st={entrada + 0.3:.2f}:d=0.6:alpha=1[marca];"
             f"[fechado][marca]overlay=(W-w)/2:(H-h)/2:format=auto[v]"
         )
 
