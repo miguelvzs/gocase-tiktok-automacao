@@ -7,7 +7,7 @@ compõe o produto, monta o vídeo vertical, publica e confirma o resultado.
 Business case para o processo seletivo de Estágio em RPA na **GoCase (GoGroup)**.
 Área de negócio: Marketing e Aquisição.
 
-**Serviço no ar:** `https://radar-tendencia-gocase.onrender.com`
+**Serviço no ar:** `https://radar-tendencia-gocase.fly.dev`
 **Documentação interativa da API:** `/docs`
 
 ---
@@ -20,6 +20,7 @@ Business case para o processo seletivo de Estágio em RPA na **GoCase (GoGroup)*
 - [Quem faz o quê](#quem-faz-o-quê)
 - [Resultado medido](#resultado-medido)
 - [Decisões de arquitetura](#decisões-de-arquitetura)
+  - [Por que a hospedagem mudou](#por-que-a-hospedagem-mudou)
 - [Degradação graciosa](#degradação-graciosa)
 - [Armadilhas de plataforma tratadas no código](#armadilhas-de-plataforma-tratadas-no-código)
 - [Configuração sem código](#configuração-sem-código)
@@ -131,7 +132,9 @@ em instruções acionáveis.
 
 | Tecnologia | Papel |
 |---|---|
-| **Render** | Hospeda a API. Deploy automático a cada envio ao repositório, lendo `render.yaml`. Plano gratuito: 512 MB, processador compartilhado, hiberna sem uso. |
+| **Fly.io** | Hospeda a API em microVM, lendo `fly.toml`. Dois vCPUs dedicados e 4 GB. Desliga sozinha entre execuções e acorda na primeira requisição. Cobrança por segundo de execução. |
+| **Docker** | Empacota a aplicação. Imagem `python:3.12-slim` sem nenhum `apt-get`: FFmpeg e o rasterizador de PDF chegam como binário dentro dos pacotes pip. |
+| **Render** | Alternativa preservada em `render.yaml`. Plano gratuito: 512 MB e 0,1 CPU. Continua funcionando; ver [Por que a hospedagem mudou](#por-que-a-hospedagem-mudou). |
 | **FastAPI** | Define a API HTTP: rotas, validação de entrada, documentação interativa automática em `/docs`. |
 | **uvicorn** | Servidor que executa a aplicação. |
 | **Pydantic** | Valida o corpo das requisições e descreve cada campo na documentação. |
@@ -206,11 +209,17 @@ Custo por etapa, medido no ambiente publicado:
 | **Vídeo** | **135,1 s** |
 | Publicação e confirmação | 18,6 s |
 
-O vídeo domina porque o plano gratuito oferece uma fração de um núcleo e a
-codificação usa uma thread só. O mesmo vídeo leva 5 s em máquina comum.
+Esses números são do plano gratuito do Render, onde o serviço rodava com **0,1
+CPU**. O vídeo consumia 77% do tempo por causa disso: o mesmo vídeo leva 5,4 s
+em máquina comum, um fator de 25×. Foi essa medição que motivou a troca de
+hospedagem descrita em [Por que a hospedagem mudou](#por-que-a-hospedagem-mudou).
 
 O relatório de cada execução traz esses tempos no campo `tempos`. Foi medindo
 que a duração caiu de 305 s para 176 s — a suspeita inicial era outra.
+
+**A medição equivalente no Fly ainda não foi feita.** A estimativa é ~48 s
+totais, com o vídeo em ~8 s, mas estimativa não é medição e este documento
+distingue as duas coisas.
 
 ### Evidência
 
@@ -227,6 +236,74 @@ de o sistema acompanhar em vez de disparar e esquecer.
 ---
 
 ## Decisões de arquitetura
+
+### Por que a hospedagem mudou
+
+A automação nasceu no plano gratuito do Render e funcionava. O que a
+instrumentação revelou foi que ela funcionava **contra** a plataforma:
+
+| | Render Free |
+|---|---|
+| CPU | 0,1 de um núcleo, permanente |
+| Memória | 512 MB |
+| Cobrança | mensal, independente de uso |
+| Tempo de vídeo | 135,1 s |
+
+O teto de 512 MB obrigou a codificar com uma thread, sem quadros B e com
+referência única. Essa economia era necessária — mas amarrava a velocidade,
+porque memória e tempo puxavam para lados opostos e memória vencia por ser
+fatal. O serviço passava 23h55 por dia ocioso pagando por capacidade que não
+usava, e os 5 minutos em que trabalhava eram justamente os que faltava.
+
+**A carga é em rajada.** Poucos minutos de trabalho pesado, horas de silêncio.
+Um plano de preço fixo é o formato errado para esse perfil: cobra pelo tempo
+ocioso e limita o tempo ativo.
+
+O Fly cobra **por segundo e não cobra CPU nem RAM de máquina parada**. Isso
+inverte a economia:
+
+| | Render Free | Render Starter | **Fly `performance-2x`** |
+|---|---|---|---|
+| CPU | 0,1 fixo | 0,5 fixo | **2 dedicados** |
+| Memória | 512 MB | 512 MB | **4 GB** |
+| Custo/mês estimado | US$ 0 | US$ 7,00 | **~US$ 0,50** |
+
+Uma execução de 60 s em `performance-2x` custa US$ 0,0014. Trinta execuções por
+mês somam cinco centavos de processamento; o custo passa a ser o disco da
+máquina parada, não o trabalho. **Um núcleo dedicado sai mais barato que meio
+núcleo fixo, porque não se paga pelas horas de silêncio.**
+
+#### A armadilha das máquinas compartilhadas
+
+A escolha óbvia seria `shared-cpu-1x`, que anuncia "1 vCPU". Ela renderia **5 ms
+a cada 80 ms — 6,25% de um núcleo**, menos que o plano gratuito que estava sendo
+abandonado. Passar disso exige gastar um saldo de rajada acumulado, e a
+documentação não informa a taxa de recomposição desse saldo.
+
+Codificar vídeo é carga sustentada de CPU: o saldo acabaria no meio. A troca
+teria saído **mais lenta** que a origem. Daí `performance-2x`, com núcleos sem
+cota.
+
+#### O que a mudança destravou no código
+
+O orçamento de codificação deixou de ser constante e passa a ser lido do
+ambiente, em `src/video.py`. A cota vem do cgroup, não de `os.cpu_count()` —
+esta última reporta os núcleos do hospedeiro, e no plano gratuito anterior dizia
+haver vários enquanto a fatia real era 0,1.
+
+Com folga de memória, o perfil enxuto dá lugar a `ref=3` e `bframes=2`: **28% de
+redução no arquivo pelo mesmo tempo de parede** (1293 KB → 936 KB). A mesma
+imagem, menos bytes.
+
+Uma tentativa foi descartada por medição: subir o preset de `veryfast` para
+`medium` junto com a memória parecia natural e saiu **45% mais lento com arquivo
+maior** (7,1 s / 1048 KB contra 4,9 s / 937 KB). O conteúdo é uma aproximação
+lenta sobre arte vetorial chapada — a busca de movimento cara do `medium` não
+tem o que encontrar. O preset ficou onde estava.
+
+Fica registrado o que a troca **não** resolve: as etapas de IA e de publicação
+somam ~41 s de latência de rede alheia. Esse é o piso da automação, e nenhuma
+hospedagem o move.
 
 ### Por que a IA gera a arte, não o vídeo inteiro
 
@@ -302,8 +379,11 @@ A geração leva minutos. Nenhum request HTTP síncrono sobrevive a isso — nem
 n8n, nem em plano gratuito, nem em proxy nenhum. O fluxo dispara, recebe um
 `job_id` e consulta até o estado final.
 
-O polling tem um efeito colateral útil: mantém tráfego constante, o que impede o
-serviço de hibernar no meio do trabalho.
+O polling tem um efeito colateral útil, e ele virou requisito: a máquina desliga
+sozinha quando não há tráfego, e o job roda em thread de fundo, que o proxy não
+enxerga. É a consulta a cada poucos segundos que mantém a máquina de pé até o
+fim do trabalho. O `kill_timeout` de 5 minutos no `fly.toml` é a rede de
+segurança para o caso de o tráfego cessar antes da hora.
 
 ---
 
@@ -438,6 +518,11 @@ distintos. Reduzir o buffer do zoom custava 6 MB. E as quedas do serviço que
 pareciam falta de memória eram, na verdade, redeploys disparados durante a
 própria execução — o que só ficou claro quando o serviço passou a reportar o
 próprio consumo.
+
+O desfecho desta investigação: com 4 GB disponíveis, o teto de 512 MB deixou de
+existir e a economia toda deixou de ser obrigatória. Ela continua no código como
+piso, selecionada automaticamente quando o ambiente é apertado — a automação
+roda nos dois mundos sem editar nada.
 
 ---
 

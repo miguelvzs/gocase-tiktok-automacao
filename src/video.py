@@ -19,8 +19,10 @@ from __future__ import annotations
 
 import base64
 import logging
+import os
 import subprocess
 import time
+from functools import lru_cache
 from pathlib import Path
 
 import httpx
@@ -44,25 +46,104 @@ def _ffmpeg() -> str:
     return imageio_ffmpeg.get_ffmpeg_exe()
 
 
-# Parâmetros de codificação escolhidos por medição, não por hábito.
+# Parâmetros de codificação escolhidos por medição, não por hábito — e agora
+# escolhidos pelo hardware em que o processo está de fato rodando.
 #
 # O libx264 aloca buffers de quadro por thread e por quadro de lookahead. Nos
 # padrões, codificar 1080x1920 consumia 906 MB — mais do que o container de
-# 512 MB do plano gratuito, e o serviço morria por falta de memória.
+# 512 MB do plano gratuito antigo, e o serviço morria por falta de memória.
 #
 # `-threads` do FFmpeg NÃO controla o threading interno do x264; é preciso
 # passar `threads=1` dentro de `-x264-params`. Só isso derrubou de 906 para
 # 336 MB. Limitar refs e lookahead levou a 293.
 #
-# A quantidade de memória não é problema de qualidade aqui: o arquivo final
-# fica abaixo de 1 MB contra um teto de 25 MB, então sobra folga para usar um
-# CRF baixo e compensar o preset rápido.
+# O problema é que essa economia foi calibrada para um teto de 512 MB e virou
+# uma amarra: com uma thread só, num ambiente que oferecia uma fração de núcleo,
+# a codificação levava 135 s. A restrição de memória e a de tempo puxavam para
+# lados opostos, e a de memória vencia por ser fatal.
+#
+# Num ambiente com núcleos dedicados e GB de folga, manter esses valores seria
+# desperdício puro. Daí a escolha ser feita em tempo de execução.
+CRF = "20"
+
+# Perfil enxuto: uma thread, sem quadros B, referência única. Sobrevive em
+# 512 MB. É o piso, não o padrão.
 X264_ECONOMICO = (
     "threads=1:lookahead_threads=1:sliced-threads=0:"
     "rc-lookahead=10:sync-lookahead=0:ref=1:bframes=0"
 )
+
+# Perfil folgado: threads reais, quadros B e lookahead de volta.
+#
+# O preset continua `veryfast` nos dois casos, o que contraria a intuição. A
+# tentação era subir para `medium` junto com a memória, mas a medição no mesmo
+# insumo desmentiu: `medium` ficou 45% mais lento E produziu arquivo MAIOR
+# (7,1 s / 1048 KB contra 4,9 s / 937 KB). O conteúdo é uma aproximação lenta
+# sobre arte vetorial chapada — a busca de movimento cara do `medium` não tem o
+# que encontrar, enquanto `ref=3` e `bframes=2` sozinhos capturam a redundância
+# entre quadros, que aqui é quase total.
+#
+# O ganho real deste perfil é 28% de tamanho pelo mesmo tempo de parede. Tempo
+# de codificação não muda: quem dominava os 135 s do ambiente antigo era a cota
+# de CPU estrangulando o grafo de filtros inteiro, não o número de threads.
 PRESET = "veryfast"
-CRF = "20"
+X264_FOLGADO = "rc-lookahead=20:ref=3:bframes=2"
+
+# Teto de threads. Acima disso o x264 divide o quadro em fatias demais e a
+# qualidade cai sem ganho de tempo proporcional em vídeo de 8 segundos.
+MAX_THREADS = 4
+
+# Abaixo disto o perfil enxuto é obrigatório, em MB.
+MEMORIA_MINIMA_FOLGADA = 1024
+
+
+def _cota_cpu() -> float:
+    """Núcleos realmente disponíveis a este processo.
+
+    `os.cpu_count()` reporta os núcleos do hospedeiro, não a fatia concedida ao
+    container: no plano gratuito anterior ele dizia haver vários núcleos
+    enquanto a cota real era 0,1. A cota fica no cgroup, e é ela que decide.
+    """
+    try:  # cgroup v2: "<quota> <periodo>" ou "max <periodo>"
+        quota, periodo = Path("/sys/fs/cgroup/cpu.max").read_text().split()
+        if quota != "max":
+            return int(quota) / int(periodo)
+    except (OSError, ValueError):
+        pass
+    return float(os.cpu_count() or 1)
+
+
+def _limite_memoria_mb() -> float:
+    try:
+        valor = Path("/sys/fs/cgroup/memory.max").read_text().strip()
+        if valor != "max":
+            return int(valor) / 1024 / 1024
+    except (OSError, ValueError):
+        pass
+    return float("inf")
+
+
+@lru_cache(maxsize=1)
+def _orcamento() -> str:
+    """Parâmetros do x264 conforme o ambiente. Medido, não presumido."""
+    forcado = os.environ.get("X264_THREADS", "").strip()
+    threads = int(forcado) if forcado.isdigit() and int(forcado) > 0 else 0
+
+    cpus, memoria = _cota_cpu(), _limite_memoria_mb()
+    if not threads:
+        threads = int(min(cpus, MAX_THREADS)) if cpus >= 2 else 1
+        if memoria < MEMORIA_MINIMA_FOLGADA:
+            threads = 1
+
+    log.info(
+        "Codificação: %d thread(s) — cota de %.2f CPU, limite de %s de memória.",
+        threads,
+        cpus,
+        f"{memoria:.0f} MB" if memoria != float("inf") else "sem teto",
+    )
+    if threads <= 1:
+        return X264_ECONOMICO
+    return f"threads={threads}:{X264_FOLGADO}"
 
 # Uma imagem parada entra com um único quadro em t=0. Um fade programado para o
 # fim do vídeo não teria quadros onde acontecer, e o overlay repetiria o quadro
@@ -529,7 +610,7 @@ def _finalizar(
         "-map", "0:a?" if tem_audio else f"{indice_audio}:a",
         "-t", str(duracao),
         "-c:v", "libx264", "-preset", PRESET, "-crf", CRF,
-        "-x264-params", X264_ECONOMICO,
+        "-x264-params", _orcamento(),
         "-pix_fmt", "yuv420p", "-profile:v", "high", "-level", "4.0",
         "-c:a", "aac", "-b:a", "128k", "-shortest",
         "-movflags", "+faststart",
@@ -546,7 +627,7 @@ def _finalizar(
             [
                 "-i", str(destino),
                 "-c:v", "libx264", "-preset", PRESET, "-crf", "30",
-                "-x264-params", X264_ECONOMICO,
+                "-x264-params", _orcamento(),
                 "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "96k",
                 "-movflags", "+faststart",
                 str(reduzido),

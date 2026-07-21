@@ -1,0 +1,21 @@
+# Disco parado é o maior custo fixo da aplicação no Fly (US$ 0,15/GB a cada 30
+# dias). Tudo que não roda em produção fica de fora da imagem.
+.git
+.gitignore
+.venv
+venv
+__pycache__
+**/__pycache__
+*.pyc
+.env
+.env.*
+!.env.exemplo
+output
+exemplo
+integracoes
+render.yaml
+README.md
+
+# testar.py fica DENTRO da imagem de propósito. Este projeto já perdeu tempo
+# com diagnósticos feitos na máquina de desenvolvimento que não valiam no
+# container; poder rodar a suíte no ambiente real vale os poucos KB.

@@ -1,0 +1,56 @@
+# Deploy no Fly.io.
+#
+# A escolha desta plataforma foi por FORMATO DE COBRANÇA, não por CPU bruta.
+# A carga é em rajada: cerca de três minutos de trabalho pesado, seguidos de
+# horas de ociosidade. O Fly cobra por segundo e não cobra CPU nem RAM de
+# máquina parada, então um núcleo dedicado sai mais barato aqui do que meio
+# núcleo permanente em qualquer plano de preço fixo.
+#
+# Credenciais NÃO ficam neste arquivo. São gravadas como secrets:
+#   fly secrets set ANTHROPIC_API_KEY=... ZERNIO_API_KEY=...
+
+app = "radar-tendencia-gocase"
+primary_region = "iad"
+
+# Região: os destinos de rede pesados são Anthropic, Zernio e TikTok, todos nos
+# Estados Unidos. O tráfego do operador são poucas chamadas HTTP pequenas. Ficar
+# perto das APIs vale mais do que ficar perto de quem clica o botão.
+
+[build]
+
+[env]
+  MODO_RASCUNHO = "false"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+
+  # Escala a zero entre execuções. É isto que torna a conta desprezível: a
+  # máquina só existe enquanto há trabalho.
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+
+  # O fluxo n8n consulta o estado do job a cada poucos segundos. Esse tráfego
+  # contínuo é o que impede o proxy de considerar a máquina ociosa e desligá-la
+  # no meio de uma execução.
+  [http_service.concurrency]
+    type = "requests"
+    soft_limit = 20
+    hard_limit = 40
+
+# Os jobs vivem em memória e rodam em thread de fundo. Um encerramento abrupto
+# perderia o trabalho em andamento sem que o operador soubesse por quê; a folga
+# cobre uma execução inteira.
+kill_signal = "SIGINT"
+kill_timeout = "5m"
+
+# performance-2x: 2 vCPUs DEDICADOS, 4 GB.
+#
+# As máquinas `shared-cpu-*` são uma armadilha para este trabalho. Elas rendem
+# 5 ms a cada 80 ms — 6,25% de um núcleo — e só passam disso gastando um saldo
+# de rajada acumulado. Codificar vídeo é justamente carga sustentada de CPU: o
+# saldo acaba no meio e a codificação despenca para menos do que o plano
+# gratuito anterior entregava.
+[[vm]]
+  size = "performance-2x"
