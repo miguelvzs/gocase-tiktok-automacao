@@ -2,8 +2,8 @@
 #
 # Não há `apt-get` aqui, e isso é intencional. FFmpeg vem como binário estático
 # dentro do pacote `imageio-ffmpeg`, e o rasterizador de PDF vem dentro do
-# `pypdfium2` — ambos via pip, ambos com wheel manylinux. A mesma decisão que
-# permitia rodar no runtime Python do Render agora mantém esta imagem pequena.
+# `pypdfium2` — ambos via pip, ambos com wheel manylinux. É o que mantém a
+# imagem em 113 MB e o build sem camada de compilação.
 #
 # Tamanho importa em dinheiro: máquina parada não paga CPU nem RAM, mas paga
 # disco a US$ 0,15 por GB a cada 30 dias. O disco é o maior custo fixo desta
@@ -24,8 +24,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-# A porta é fixa no contrato com o fly.toml, não herdada do ambiente: o Fly não
-# injeta $PORT como o Render fazia.
+# A porta é fixa no contrato com o fly.toml, não herdada de $PORT no ambiente.
 #
 # O arranque é `uvicorn`, não `fastapi run`. O detector automático do Fly gera
 # `CMD ["/app/.venv/bin/fastapi", "run"]`, que falha por dois motivos ao mesmo

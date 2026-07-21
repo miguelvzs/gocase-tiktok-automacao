@@ -134,7 +134,6 @@ em instruções acionáveis.
 |---|---|
 | **Fly.io** | Hospeda a API em microVM, lendo `fly.toml`. Dois vCPUs dedicados e 4 GB. Desliga sozinha entre execuções e acorda na primeira requisição. Cobrança por segundo de execução. |
 | **Docker** | Empacota a aplicação. Imagem `python:3.12-slim` sem nenhum `apt-get`: FFmpeg e o rasterizador de PDF chegam como binário dentro dos pacotes pip. |
-| **Render** | Alternativa preservada em `render.yaml`. Plano gratuito: 512 MB e 0,1 CPU. Continua funcionando; ver [Por que a hospedagem mudou](#por-que-a-hospedagem-mudou). |
 | **FastAPI** | Define a API HTTP: rotas, validação de entrada, documentação interativa automática em `/docs`. |
 | **uvicorn** | Servidor que executa a aplicação. |
 | **Pydantic** | Valida o corpo das requisições e descreve cada campo na documentação. |
@@ -204,7 +203,7 @@ Execução real, conta de teste, publicação pública, sem intervenção manual
 Custo por etapa, medido no ambiente publicado, com a mesma automação nas duas
 hospedagens:
 
-| Etapa | Render Free (0,1 CPU) | Fly `performance-2x` |
+| Etapa | plano gratuito anterior (0,1 CPU) | Fly `performance-2x` |
 |---|---|---|
 | Texto e arte (em paralelo) | 19,1 s | 23,6 s |
 | Composição no produto | 3,4 s | 0,6 s |
@@ -224,8 +223,8 @@ a estimativa tratou as etapas de rede como constantes, e elas não são. A parte
 que dependia de hardware era previsível; a que dependia de terceiros, não.
 
 O relatório de cada execução traz esses tempos no campo `tempos`. A duração caiu
-de 305 s para 176 s por medição dentro do Render, e de 176 s para 64 s pela
-troca de hospedagem — as duas vezes contrariando a primeira hipótese.
+de 305 s para 176 s por medição dentro do ambiente antigo, e de 176 s para 64 s
+pela troca de hospedagem — as duas vezes contrariando a primeira hipótese.
 
 ### Evidência
 
@@ -245,10 +244,10 @@ de o sistema acompanhar em vez de disparar e esquecer.
 
 ### Por que a hospedagem mudou
 
-A automação nasceu no plano gratuito do Render e funcionava. O que a
+A automação nasceu num plano gratuito de preço fixo e funcionava. O que a
 instrumentação revelou foi que ela funcionava **contra** a plataforma:
 
-| | Render Free |
+| | plano gratuito anterior |
 |---|---|
 | CPU | 0,1 de um núcleo, permanente |
 | Memória | 512 MB |
@@ -268,13 +267,18 @@ ocioso e limita o tempo ativo.
 O Fly cobra **por segundo e não cobra CPU nem RAM de máquina parada**. Isso
 inverte a economia:
 
-| | Render Free | Render Starter | **Fly `performance-2x`** |
+| | plano gratuito anterior | plano pago equivalente | **Fly `performance-2x`** |
 |---|---|---|---|
 | CPU | 0,1 fixo | 0,5 fixo | **2 dedicados** |
 | Memória | 512 MB | 512 MB | **4 GB** |
-| Custo/mês estimado | US$ 0 | US$ 7,00 | **~US$ 0,50** |
+| Custo/mês | US$ 0 | US$ 7,00 | **~US$ 0,50** |
 | Acordar do repouso | ~50 s | não dorme | **5,6 s** |
 | Execução completa | 176,2 s | — | **64,4 s** |
+
+O plano pago de preço fixo custaria **14 vezes mais por um quarto da CPU**. A
+comparação acima é a justificativa da escolha e fica registrada como histórico;
+a hospedagem anterior não é mais uma alternativa mantida, e o repositório não
+guarda configuração para ela.
 
 Uma execução de 60 s em `performance-2x` custa US$ 0,0014. Trinta execuções por
 mês somam cinco centavos de processamento; o custo passa a ser o disco da
