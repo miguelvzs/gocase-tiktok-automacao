@@ -673,7 +673,17 @@ que arte e composição somavam menos de 110 MB e o FFmpeg sozinho usava 1011 MB
 | `-loop 1` numa entrada de imagem bufferiza ~150 MB por arquivo; repetir o quadro dentro do grafo de filtros custa 8 MB | 394 → 199 MB |
 | O pipeline codificava duas vezes: gerava um MP4 intermediário e o relia para aplicar o texto | 448 → 307 MB |
 
-Pico atual medido dentro do container: **193 MB**.
+Pico ao fim daquela investigação: **193 MB**, contra o teto de 512 MB da
+hospedagem da época.
+
+Hoje o pico é **360 MB**, e o aumento foi deliberado: a composição do produto
+passou a ser desenhada em escala dobrada e reduzida com LANCZOS, o que
+quadruplica os pixels em memória e elimina o serrilhado das quinas. Contra o
+teto atual de 4096 MB, é troco — mas teria sido impossível no teto antigo.
+
+Os dois números medem o mesmo processo em momentos diferentes: **193 MB** é onde
+a otimização chegou sob restrição de 512 MB; **360 MB** é onde ele está depois de
+gastar parte da folga nova em qualidade de imagem.
 
 Vale o registro de método: a primeira hipótese estava errada em dois momentos
 distintos. Reduzir o buffer do zoom custava 6 MB. E as quedas do serviço que
