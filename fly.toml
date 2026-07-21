@@ -9,7 +9,9 @@
 # Credenciais NÃO ficam neste arquivo. São gravadas como secrets:
 #   fly secrets set ANTHROPIC_API_KEY=... ZERNIO_API_KEY=...
 
-app = "radar-tendencia-gocase"
+# O nome acompanha o repositório porque foi assim que o app nasceu no primeiro
+# deploy. O projeto se chama Radar de Tendência; o app, não.
+app = "gocase-tiktok-automacao"
 primary_region = "iad"
 
 # Região: os destinos de rede pesados são Anthropic, Zernio e TikTok, todos nos

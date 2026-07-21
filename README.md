@@ -7,7 +7,7 @@ compõe o produto, monta o vídeo vertical, publica e confirma o resultado.
 Business case para o processo seletivo de Estágio em RPA na **GoCase (GoGroup)**.
 Área de negócio: Marketing e Aquisição.
 
-**Serviço no ar:** `https://radar-tendencia-gocase.fly.dev`
+**Serviço no ar:** `https://gocase-tiktok-automacao.fly.dev`
 **Documentação interativa da API:** `/docs`
 
 ---

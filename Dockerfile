@@ -26,5 +26,12 @@ COPY . .
 
 # A porta é fixa no contrato com o fly.toml, não herdada do ambiente: o Fly não
 # injeta $PORT como o Render fazia.
+#
+# O arranque é `uvicorn`, não `fastapi run`. O detector automático do Fly gera
+# `CMD ["/app/.venv/bin/fastapi", "run"]`, que falha por dois motivos ao mesmo
+# tempo: o executável `fastapi` vem do pacote `fastapi-cli`, instalado só com
+# `fastapi[standard]`, e este projeto declara `fastapi` puro; e `fastapi run`
+# escuta na porta 8000, enquanto o proxy encaminha para a 8080. O container
+# morria no arranque e o proxy não achava máquina para rotear.
 EXPOSE 8080
 CMD ["uvicorn", "api:app", "--host", "0.0.0.0", "--port", "8080"]
