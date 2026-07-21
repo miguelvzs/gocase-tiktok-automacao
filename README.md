@@ -88,11 +88,19 @@ sinais de tendência (tema, público e **linguagem visual**). Escolhe uma
 combinação, evitando as recentes: conteúdo repetido é recusado pela plataforma
 de publicação dentro de 24 horas.
 
-Cada sinal é um movimento estético específico — Memphis dos anos 80, risograph,
-ladrilho hidráulico, terrazzo — e não uma categoria vaga. A diferença aparece no
-desenho: "estética retrô" deixa a escolha visual inteira para o modelo, que
-resolve pelo caminho mais previsível; "Memphis dos anos 80" traz forma, cor e
-vocabulário próprios. São 14 sinais e 3 produtos, 42 combinações.
+Cada sinal é um movimento estético específico — Y2K cromado, coquette, traço de
+mangá, grafite — e não uma categoria vaga. A diferença aparece no desenho:
+"estética retrô" deixa a escolha visual inteira para o modelo, que resolve pelo
+caminho mais previsível; "Y2K cromado" traz forma, cor e vocabulário próprios.
+
+Especificidade sozinha não basta: o sinal também precisa ser do **território
+certo**. Uma versão anterior trazia ladrilho hidráulico, terrazzo e art déco —
+estéticas específicas, mas de arquitetura e decoração, com públicos de 25 a 40
+anos. Ninguém compra capinha porque gostou de um piso. O critério de entrada
+está escrito no `config.yaml`: cultura jovem, público de 16 a 32, e algo que a
+pessoa carregaria no bolso o dia inteiro.
+
+São 14 sinais e 3 produtos, 42 combinações.
 
 ### 2. Criação — texto e arte, ao mesmo tempo
 

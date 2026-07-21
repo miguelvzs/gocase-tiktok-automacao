@@ -82,9 +82,16 @@ ESQUEMA = {
             "description": (
                 "Frase que aparece SOBRE o vídeo, até 60 caracteres. É lida em "
                 "menos de um segundo, enquanto o dedo já está subindo — precisa "
-                "criar tensão ou curiosidade, não descrever a imagem. "
-                "Ruim: 'Capinha com estampa botânica' (o vídeo já mostra isso). "
-                "Bom: 'Achei a estampa antes do fabricante'. "
+                "criar vontade de ter a capinha, não contar a história do "
+                "padrão. Fale do produto ou de quem o usa. "
+                "Ruim: 'Capinha com estampa botânica' — o vídeo já mostra isso. "
+                "Ruim: 'O piso da casa da minha avó virou capinha' — vende "
+                "curiosidade sobre a origem, não a capinha. "
+                "Bom: 'A estampa que todo mundo vai querer semana que vem'. "
+                "NÃO comece com 'A capinha que' nem com 'A estampa que' — é a "
+                "saída mais óbvia e vira molde quando dois posts saem na mesma "
+                "semana. Varie a entrada: comece pelo público, por uma cena de "
+                "uso, por uma afirmação seca ou por um contraste. "
                 "Sem ponto final, sem emoji, sem hashtag."
             ),
         },
@@ -96,10 +103,15 @@ ESQUEMA = {
                 "(\\n): "
                 "(1) uma frase curta que continue o gancho em vez de repeti-lo — "
                 "é a única linha visível antes do 'ver mais'; "
-                "(2) uma frase que ligue a tendência ao fato de a marca produzir "
-                "sob demanda, ou seja, por que esta estampa existe hoje; "
-                "(3) uma pergunta direta ao leitor, que dê motivo para comentar. "
-                "Sem emoji. Sem repetir palavra do gancho."
+                "(2) uma frase sobre a CAPINHA que dê a sensação de disponível "
+                "agora. É oferta de produto, não aula sobre a origem da "
+                "estampa. Diga isso do jeito que couber neste tema — evite as "
+                "muletas 'sem fila', 'sem espera' e 'sem estoque', que viram "
+                "assinatura repetida entre posts; "
+                "(3) uma pergunta direta ao leitor sobre a escolha dele, que dê "
+                "motivo para comentar. "
+                "Sem emoji. Sem repetir palavra do gancho. Nada de história "
+                "cultural do padrão: quem lê quer a capinha, não o contexto."
             ),
         },
         "cta": {
@@ -153,7 +165,11 @@ def _sistema(marca: dict[str, Any]) -> str:
         "termina em pergunta respondível — não em 'o que você acha?', que é "
         "pergunta vazia, mas em algo específico daquela estampa.\n"
         "- Escreva como quem manda mensagem, não como quem anuncia. Frases "
-        "curtas. Nada de 'descubra', 'confira', 'imperdível'.\n\n"
+        "curtas. Nada de 'descubra', 'confira', 'imperdível'.\n"
+        "- O produto é uma capinha, comprada por gente de 16 a 30 anos que a "
+        "carrega o dia inteiro. O texto oferece a capinha; não explica de onde "
+        "o padrão veio nem dá aula de história do design. Curiosidade sobre a "
+        "origem da estampa não vende capinha.\n\n"
         "Português do Brasil correto. Ao dar uma ordem ou convite ao leitor, "
         "use o imperativo na 3ª pessoa — 'Monte a sua', não 'Monta a sua'."
     )
