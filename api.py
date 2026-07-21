@@ -76,6 +76,9 @@ def _executar(job_id: str, pedido: PedidoPublicacao) -> None:
             if job_id in _JOBS:
                 _JOBS[job_id]["etapa"] = etapa
                 _JOBS[job_id]["mensagem"] = mensagem
+                # O pico acompanha o job: se o container for morto por estouro,
+                # a última leitura antes da queda diz onde estava.
+                _JOBS[job_id]["memoria_mb"] = _memoria_mb()
 
     try:
         relatorio = executar_pipeline(
@@ -96,12 +99,38 @@ def _executar(job_id: str, pedido: PedidoPublicacao) -> None:
             )
 
 
+def _memoria_mb() -> dict[str, float]:
+    """Consumo do processo, lido do próprio sistema.
+
+    Existe porque medir memória na máquina de desenvolvimento não previu o que
+    aconteceu no container: o serviço foi morto por estouro várias vezes com
+    medições locais folgadas. Um número vindo de dentro do ambiente real vale
+    mais do que uma extrapolação.
+    """
+    dados: dict[str, float] = {}
+    try:
+        with open("/proc/self/status", encoding="utf-8") as arquivo:
+            for linha in arquivo:
+                if linha.startswith("VmRSS:"):
+                    dados["atual"] = round(int(linha.split()[1]) / 1024, 1)
+                elif linha.startswith("VmHWM:"):  # pico histórico do processo
+                    dados["pico"] = round(int(linha.split()[1]) / 1024, 1)
+    except OSError:
+        pass  # fora do Linux não existe; o serviço não depende disto
+    return dados
+
+
 @app.get("/", summary="Saúde do serviço")
 def saude() -> dict[str, Any]:
     with _TRAVA:
         _limpar_expirados()
         ativos = sum(1 for d in _JOBS.values() if d["estado"] == "executando")
-    return {"servico": "radar-tendencia-gocase", "status": "ok", "jobs_ativos": ativos}
+    return {
+        "servico": "radar-tendencia-gocase",
+        "status": "ok",
+        "jobs_ativos": ativos,
+        "memoria_mb": _memoria_mb(),
+    }
 
 
 @app.post("/publicar", status_code=202, summary="Dispara uma publicação")
