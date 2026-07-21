@@ -126,8 +126,8 @@ Fonte fora do ar, feed vazio, triagem falhando ou credencial ausente: todos os
 casos devolvem lista vazia e o catálogo assume. Uma fonte externa instável não
 tem poder de parar o pipeline.
 
-**Custo:** cerca de 8 s no início da execução — leitura do feed mais uma chamada
-de triagem com esforço baixo, porque classificar não é criar.
+**Custo:** de 8 a 15 s no início da execução, medido em três leituras — o feed
+mais uma chamada de triagem com esforço baixo, porque classificar não é criar.
 
 ---
 
@@ -306,7 +306,7 @@ Execução real, conta de teste, publicação pública, sem intervenção manual
 | Custo por execução | ~US$ 0,05 em IA · ~US$ 0,002 em processamento |
 | Pico de memória no container | 360 MB, contra um teto de 4096 MB |
 | Vídeo entregue | 1080×1920, H.264 yuv420p, 30 fps, faixa AAC, 8,00 s |
-| Tamanho do arquivo | 0,92 MB, contra um teto de 25 MB |
+| Tamanho do arquivo | 0,7 a 0,9 MB, contra um teto de 25 MB |
 | Estado final | `published` |
 | Intervenção humana | nenhuma |
 
@@ -325,6 +325,12 @@ hospedagens:
 O vídeo ficou **11 vezes mais rápido** e passou de 77% para 15% do tempo total.
 O que domina agora são as chamadas de IA e a latência da plataforma — coisas que
 nenhuma hospedagem move.
+
+A etapa de publicação é a mais instável de todas: cinco execuções mediram 18,6 s,
+24,9 s, 29,9 s, 48,9 s e 92,4 s. A variação é do processamento do TikTok, não do
+código — o sistema fica em laço aguardando o estado final. **Na prática, uma
+execução leva de 1,5 a 3 minutos**, e o campo `tempos` do relatório mostra em
+qual etapa o tempo foi gasto.
 
 Duas linhas subiram de propósito, e vale dizer por quê. O radar são 7,7 s que
 não existiam: é o preço de ler o mundo em vez de um arquivo. E a arte passou de
@@ -393,12 +399,16 @@ inverte a economia:
 | Acordar do repouso | ~50 s | não dorme | **5,6 s** |
 | Execução completa | 176,2 s | — | **64,4 s** |
 
+Os tempos da última linha são os da migração, quando as duas hospedagens rodavam
+exatamente o mesmo código — é o que torna a comparação honesta. A automação hoje
+leva 82 s, porque ganhou o radar e uma arte mais densa depois disso.
+
 O plano pago de preço fixo custaria **14 vezes mais por um quarto da CPU**. A
 comparação acima é a justificativa da escolha e fica registrada como histórico;
 a hospedagem anterior não é mais uma alternativa mantida, e o repositório não
 guarda configuração para ela.
 
-Uma execução de 60 s em `performance-2x` custa US$ 0,0014. Trinta execuções por
+Uma execução de 90 s em `performance-2x` custa US$ 0,002. Trinta execuções por
 mês somam cinco centavos de processamento; o custo passa a ser o disco da
 máquina parada, não o trabalho. **Um núcleo dedicado sai mais barato que meio
 núcleo fixo, porque não se paga pelas horas de silêncio.**
@@ -646,11 +656,17 @@ terminal e os testes chamam a mesma função. Nenhum reimplementa etapa.
 
 ## Qualidade
 
-`testar.py` executa **40 verificações** sem exigir credencial: carga e
-degradação da configuração, rotação de tendências, guardrails caso a caso,
-pipeline de mídia completo com conferência da especificação real do vídeo,
-integridade do workflow n8n, parsing das respostas da API de publicação, área
-segura do texto e comportamento das superfícies quando falta chave.
+`testar.py` executa **65 verificações** sem exigir credencial: carga e
+degradação da configuração, rotação de tendências, triagem do radar com a fonte
+fora do ar, guardrails caso a caso, saneamento do SVG vindo da IA, cobertura de
+acentos da fonte do vídeo, pipeline de mídia completo com conferência da
+especificação real do arquivo, integridade do fluxo n8n, interpretação das
+respostas da API de publicação, área segura do texto e comportamento das
+superfícies quando falta chave.
+
+Três blocos nasceram de defeitos que chegaram a produção: a fonte sem acentos, o
+SVG com cor partida por espaço e a triagem do radar. Teste escrito depois do
+defeito não impede aquele defeito — impede a volta dele.
 
 Defeitos reais encontrados durante a construção, agrupados por **como** foram
 descobertos — cada método pegou o que os outros não alcançavam:

@@ -751,7 +751,7 @@ def conteudo() -> list:
     f += [
         h1("11. Qualidade e Salvaguardas"),
         p(
-            "O projeto acompanha uma verificação automatizada com <b>40 checagens</b>, "
+            "O projeto acompanha uma verificação automatizada com <b>65 checagens</b>, "
             "que roda sem exigir nenhuma credencial."
         ),
         tabela(
