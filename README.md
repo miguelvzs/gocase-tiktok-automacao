@@ -192,34 +192,40 @@ Execução real, conta de teste, publicação pública, sem intervenção manual
 
 | Métrica | Valor |
 |---|---|
-| Tempo total, do sinal à confirmação | **176 s** no serviço publicado · ~30 s em máquina local |
-| Custo por execução | ~US$ 0,04 |
-| Pico de memória no container | 193 MB, contra um teto de 512 MB |
+| Tempo total, do sinal à confirmação | **64 s** no serviço publicado · ~25 s em máquina local |
+| Tempo para acordar o serviço parado | 5,6 s |
+| Custo por execução | ~US$ 0,04 em IA · ~US$ 0,0015 em processamento |
+| Pico de memória no container | 185 MB, contra um teto de 4096 MB |
 | Vídeo entregue | 1080×1920, H.264 yuv420p, 30 fps, faixa AAC, 8,00 s |
-| Tamanho do arquivo | ~1,3 MB, contra um teto de 25 MB |
+| Tamanho do arquivo | 0,74 MB, contra um teto de 25 MB |
 | Estado final | `published` |
 | Intervenção humana | nenhuma |
 
-Custo por etapa, medido no ambiente publicado:
+Custo por etapa, medido no ambiente publicado, com a mesma automação nas duas
+hospedagens:
 
-| Etapa | Tempo |
-|---|---|
-| Texto e arte (em paralelo) | 19,1 s |
-| Composição no produto | 3,4 s |
-| **Vídeo** | **135,1 s** |
-| Publicação e confirmação | 18,6 s |
+| Etapa | Render Free (0,1 CPU) | Fly `performance-2x` |
+|---|---|---|
+| Texto e arte (em paralelo) | 19,1 s | 23,6 s |
+| Composição no produto | 3,4 s | 0,6 s |
+| **Vídeo** | **135,1 s** | **10,2 s** |
+| Publicação e confirmação | 18,6 s | 29,9 s |
+| **Total** | **176,2 s** | **64,4 s** |
 
-Esses números são do plano gratuito do Render, onde o serviço rodava com **0,1
-CPU**. O vídeo consumia 77% do tempo por causa disso: o mesmo vídeo leva 5,4 s
-em máquina comum, um fator de 25×. Foi essa medição que motivou a troca de
-hospedagem descrita em [Por que a hospedagem mudou](#por-que-a-hospedagem-mudou).
+O vídeo ficou **13 vezes mais rápido** e passou de 77% para 16% do tempo total.
+O que sobra é latência de rede alheia: as etapas de IA e de publicação variam de
+execução para execução conforme os provedores respondem, e nenhuma hospedagem
+as move. É por isso que a redução total foi de 63%, e não do mesmo fator do
+vídeo.
 
-O relatório de cada execução traz esses tempos no campo `tempos`. Foi medindo
-que a duração caiu de 305 s para 176 s — a suspeita inicial era outra.
+Vale registrar a previsão feita antes da migração: **~48 s totais, com o vídeo
+em ~8 s.** O vídeo saiu em 10,2 s, perto. O total saiu em 64,4 s, longe — porque
+a estimativa tratou as etapas de rede como constantes, e elas não são. A parte
+que dependia de hardware era previsível; a que dependia de terceiros, não.
 
-**A medição equivalente no Fly ainda não foi feita.** A estimativa é ~48 s
-totais, com o vídeo em ~8 s, mas estimativa não é medição e este documento
-distingue as duas coisas.
+O relatório de cada execução traz esses tempos no campo `tempos`. A duração caiu
+de 305 s para 176 s por medição dentro do Render, e de 176 s para 64 s pela
+troca de hospedagem — as duas vezes contrariando a primeira hipótese.
 
 ### Evidência
 
@@ -267,6 +273,8 @@ inverte a economia:
 | CPU | 0,1 fixo | 0,5 fixo | **2 dedicados** |
 | Memória | 512 MB | 512 MB | **4 GB** |
 | Custo/mês estimado | US$ 0 | US$ 7,00 | **~US$ 0,50** |
+| Acordar do repouso | ~50 s | não dorme | **5,6 s** |
+| Execução completa | 176,2 s | — | **64,4 s** |
 
 Uma execução de 60 s em `performance-2x` custa US$ 0,0014. Trinta execuções por
 mês somam cinco centavos de processamento; o custo passa a ser o disco da
@@ -302,8 +310,38 @@ lenta sobre arte vetorial chapada — a busca de movimento cara do `medium` não
 tem o que encontrar. O preset ficou onde estava.
 
 Fica registrado o que a troca **não** resolve: as etapas de IA e de publicação
-somam ~41 s de latência de rede alheia. Esse é o piso da automação, e nenhuma
-hospedagem o move.
+respondem por praticamente todo o tempo restante, e variam conforme os
+provedores. Esse é o piso da automação, e nenhuma hospedagem o move.
+
+#### O deploy sai do CLI, não do painel
+
+Os dois primeiros deploys subiram quebrados, com o proxy sem máquina para
+rotear. O log foi direto ao ponto:
+
+```
+Preparing to run: `/app/.venv/bin/fastapi run` as root
+To use the fastapi command, please install "fastapi[standard]":
+machine has reached its max restart count of 10
+```
+
+O detector automático da plataforma escaneou o repositório antes de existir um
+`Dockerfile` aqui e gerou o dele, com dois defeitos somados: o executável
+`fastapi` vem do pacote `fastapi-cli`, instalado só com `fastapi[standard]`, e
+este projeto declara `fastapi` puro; e `fastapi run` escuta na porta 8000,
+enquanto o proxy encaminha para a 8080.
+
+O detalhe que transforma isso em armadilha: **a integração com o GitHub guarda a
+configuração gerada do lado da plataforma e não lê a do repositório.** O painel
+oferece um botão para mesclar os arquivos gerados, mas esse ramo foi cortado do
+estado anterior à migração — mesclá-lo removeria 268 linhas, incluindo o
+orçamento de codificação adaptativo. Usar a configuração correta e preservar o
+código eram objetivos incompatíveis por aquele caminho.
+
+A saída é implantar pelo CLI, que lê o `fly.toml` e o `Dockerfile` do
+repositório. Foi o mesmo deploy que corrigiu o segundo sintoma: as máquinas
+tinham sido criadas como `shared-cpu-1x` com 256 MB — a configuração gerada
+trazia exatamente a armadilha descrita acima, e um deploy pelo painel troca a
+imagem sem redimensionar a máquina.
 
 ### Por que a IA gera a arte, não o vídeo inteiro
 
