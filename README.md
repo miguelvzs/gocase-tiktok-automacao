@@ -1,21 +1,30 @@
 # Radar de Tendência — GoCase
 
 Automação que transforma **um sinal de tendência em uma capinha publicada no
-TikTok**, sem intervenção humana: escolhe o tema, cria a arte, compõe o produto,
-monta o vídeo vertical e publica — com a divulgação de conteúdo gerado por IA
-que a plataforma exige.
+TikTok**, sem intervenção humana: escolhe o tema, escreve o texto, cria a arte,
+compõe o produto, monta o vídeo vertical, publica e confirma o resultado.
 
 Business case para o processo seletivo de Estágio em RPA na **GoCase (GoGroup)**.
 Área de negócio: Marketing e Aquisição.
 
 **Serviço no ar:** `https://radar-tendencia-gocase.onrender.com`
+**Documentação interativa da API:** `/docs`
 
-> **Primeira execução do dia.** O serviço está hospedado em plano gratuito e
-> hiberna após alguns minutos sem uso; a primeira chamada leva cerca de 50
-> segundos para acordá-lo. Uma execução completa leva cerca de 3 minutos nesse
-> plano — o processador é lento e a codificação do vídeo domina o tempo. O
-> fluxo n8n consulta o estado a cada 15 segundos e esse tráfego contínuo
-> impede a hibernação no meio do trabalho.
+---
+
+## Sumário
+
+- [O problema](#o-problema)
+- [Como funciona na prática](#como-funciona-na-prática)
+- [O que acontece em cada execução](#o-que-acontece-em-cada-execução)
+- [Quem faz o quê](#quem-faz-o-quê)
+- [Resultado medido](#resultado-medido)
+- [Decisões de arquitetura](#decisões-de-arquitetura)
+- [Degradação graciosa](#degradação-graciosa)
+- [Armadilhas de plataforma tratadas no código](#armadilhas-de-plataforma-tratadas-no-código)
+- [Configuração sem código](#configuração-sem-código)
+- [Qualidade](#qualidade)
+- [Escopo e evolução](#escopo-e-evolução)
 
 ---
 
@@ -36,88 +45,190 @@ ninguém no meio.**
 
 ---
 
-## Como funciona
+## Como funciona na prática
+
+Três formas de disparar, todas chamando o mesmo código:
+
+| Forma | Uso |
+|---|---|
+| **Fluxo n8n** | operação do dia a dia. Abrir, clicar em executar. Ou habilitar o gatilho diário e não abrir mais. |
+| **API HTTP** | integração com qualquer outra ferramenta — Make, Power Automate, cron com `curl`. |
+| **Terminal** | desenvolvimento e verificação. `python main.py` |
+
+O operador não escolhe tema nem produto: o sistema seleciona uma combinação
+ainda não usada do catálogo. Fixar um dos dois é opcional.
+
+Ao final, o fluxo devolve um relatório com o material produzido, o estado da
+publicação, o tempo de cada etapa e qual caminho técnico foi usado em cada
+estágio.
+
+---
+
+## O que acontece em cada execução
 
 ```
-sinal de tendência + produto do catálogo
-        ↓
-IA redige: conceito de arte, gancho, legenda, hashtags     ← guardrails de marca
-        ↓
-arte gerada  →  composta na capinha  →  animada em 9:16    ← o ativo imprimível
-        ↓
-publicação no TikTok + confirmação de status
-        ↓
-relatório da execução
+1. SELEÇÃO      catálogo de produtos + sinais de tendência
+                        ↓
+2. CRIAÇÃO      texto e arte, em paralelo
+                        ↓
+3. COMPOSIÇÃO   arte aplicada no produto
+                        ↓
+4. VÍDEO        9:16, com assinatura de marca no fim
+                        ↓
+5. PUBLICAÇÃO   TikTok, com divulgação de conteúdo gerado por IA
+                        ↓
+6. CONFIRMAÇÃO  acompanha até o estado final
 ```
 
-O vídeo abre direto no produto, com aproximação lenta, e fecha com a assinatura
-da marca: nos últimos segundos o texto sai de cena, um véu claro entra em fade
-deixando a capinha visível por trás, e o logotipo aparece centralizado.
+### 1. Seleção — de onde vem o assunto
 
-Uma versão anterior abria com a arte se desenhando elemento por elemento,
-aproveitando a estrutura em camadas do vetor. Era tecnicamente interessante e
-foi removida: atrasava o produto em dois segundos e meio, e num formato onde a
-disputa é pelo primeiro segundo, adiar o que se vende custa mais do que a
-animação entrega.
+Lê um catálogo de produtos (SKU, nome, linha, área de impressão) e uma lista de
+sinais de tendência (tema, público). Escolhe uma combinação, evitando as
+recentes: conteúdo repetido é recusado pela plataforma de publicação dentro de
+24 horas.
 
-O operador abre o fluxo no n8n e clica em executar. Ou habilita o gatilho
-agendado e não abre mais.
+### 2. Criação — texto e arte, ao mesmo tempo
+
+Duas chamadas de IA disparam em paralelo, porque partem do mesmo insumo:
+
+- **Texto** — gancho, legenda, call to action e hashtags, com voz de marca
+- **Arte** — o desenho que vai impresso na capinha, em vetor
+
+O texto passa por uma verificação de marca antes de seguir. Se violar uma regra
+(preço, prazo de entrega, comparação com concorrente, superlativo sem lastro,
+saúde/política/religião), a execução para em vez de publicar.
+
+### 3. Composição — a arte vira produto
+
+A arte é recortada na silhueta da capinha, com módulo de câmera, borda, sombra
+projetada e brilho especular. Isso é feito por código, não por IA: garante que
+a capinha do vídeo é exatamente a que a fábrica produziria.
+
+### 4. Vídeo — o formato que a plataforma exige
+
+Aproximação lenta sobre o produto, texto sobreposto e assinatura de marca no
+encerramento. Saída em 1080×1920, H.264, yuv420p, 30 fps, com faixa de áudio.
+
+O texto respeita a faixa inferior que a interface do TikTok cobre com nome de
+perfil e legenda.
+
+### 5. Publicação — com conformidade explícita
+
+Envia ao TikTok com os campos que a plataforma exige, incluindo a divulgação de
+que o conteúdo foi gerado por IA e a natureza comercial do post.
+
+### 6. Confirmação — o resultado real
+
+Publicar é assíncrono. A criação do post retorna sucesso antes de a plataforma
+processar a mídia. O sistema acompanha o estado até o desfecho e traduz recusas
+em instruções acionáveis.
+
+---
+
+## Quem faz o quê
+
+### Infraestrutura
+
+| Tecnologia | Papel |
+|---|---|
+| **Render** | Hospeda a API. Deploy automático a cada envio ao repositório, lendo `render.yaml`. Plano gratuito: 512 MB, processador compartilhado, hiberna sem uso. |
+| **FastAPI** | Define a API HTTP: rotas, validação de entrada, documentação interativa automática em `/docs`. |
+| **uvicorn** | Servidor que executa a aplicação. |
+| **Pydantic** | Valida o corpo das requisições e descreve cada campo na documentação. |
+| **GitHub** | Versionamento e origem do deploy. |
+
+### Orquestração
+
+| Tecnologia | Papel |
+|---|---|
+| **n8n** | Orquestra o fluxo: dispara o trabalho, acorda o serviço, consulta o estado em laço, ramifica entre sucesso e falha e monta o relatório. Ferramenta low-code, sem código no fluxo. |
+| **HTTP Request node** | Faz as chamadas à API. Não existe nó nativo de TikTok no n8n — o único da comunidade está marcado pelo próprio autor como não funcional. |
+
+### Inteligência artificial
+
+| Tecnologia | Papel |
+|---|---|
+| **Claude (Anthropic)** | Escreve o conteúdo — gancho, legenda, CTA, hashtags — com a voz da marca e as proibições do catálogo. Formato garantido por JSON Schema, não por instrução no prompt. |
+| **Claude (Anthropic)** | Desenha a arte da capinha em **SVG**, a partir da tendência, do público e do produto. Paleta da marca imposta no prompt do sistema. |
+| **Google Gemini** | Caminho preferencial para a arte quando há cota: gerador de imagem, com maior alcance visual (textura, pintura, grão). Opcional. |
+| **Google Veo** | Caminho preferencial para o movimento do vídeo quando há cota. Opcional e desligado por padrão, por custo. |
+
+### Geração de mídia
+
+| Tecnologia | Papel |
+|---|---|
+| **svglib + reportlab** | Convertem o SVG da arte em PDF vetorial. Python puro. |
+| **pypdfium2** | Rasteriza o PDF em PNG na resolução da área de impressão. Binário embutido no pacote. |
+| **Pillow** | Compõe a arte na capinha, desenha a camada de texto, recorta a margem transparente do logotipo e produz a arte de reserva. |
+| **FFmpeg** (via `imageio-ffmpeg`) | Monta o vídeo final: movimento, sobreposição de texto, encerramento com a marca, faixa de áudio e normalização para a especificação do TikTok. Binário embutido no pacote. |
+
+Nem FFmpeg nem o rasterizador exigem instalação no sistema operacional: ambos
+vêm como binário dentro do pacote `pip`. A decisão existe porque o ambiente de
+hospedagem não tem gerenciador de pacotes do sistema.
+
+### Publicação
+
+| Tecnologia | Papel |
+|---|---|
+| **Zernio** | Transporte de publicação. Cliente auditado da Content Posting API oficial do TikTok. Hospeda a mídia, autentica a conta por OAuth e entrega o post. |
+| **TikTok Content Posting API** | Destino final. Recebe o vídeo, processa e publica. |
+
+### Configuração e dados
+
+| Tecnologia | Papel |
+|---|---|
+| **PyYAML** | Lê `config.yaml`, onde vivem marca, catálogo, sinais, especificação do vídeo e parâmetros de publicação. |
+| **python-dotenv** | Carrega credenciais do ambiente. Nenhuma chave em arquivo versionado. |
+| **httpx** | Cliente HTTP das integrações. |
 
 ---
 
 ## Resultado medido
 
-Execução real, conta de teste `@demogocase`, sem intervenção manual em nenhuma
-etapa:
+Execução real, conta de teste, publicação pública, sem intervenção manual:
 
 | Métrica | Valor |
 |---|---|
-| Tempo total, do sinal à confirmação | ~30 s local · ~140 s no serviço publicado |
+| Tempo total, do sinal à confirmação | **176 s** no serviço publicado · ~30 s em máquina local |
 | Custo por execução | ~US$ 0,04 |
+| Pico de memória no container | 193 MB, contra um teto de 512 MB |
 | Vídeo entregue | 1080×1920, H.264 yuv420p, 30 fps, faixa AAC, 8,00 s |
-| Tamanho | ~1 MB, contra um teto de 25 MB |
+| Tamanho do arquivo | ~1,3 MB, contra um teto de 25 MB |
 | Estado final | `published` |
 | Intervenção humana | nenhuma |
 
-A diferença entre a máquina local e o serviço publicado é o processador do
-plano gratuito, cerca de quatro vezes mais lento.
+Custo por etapa, medido no ambiente publicado:
 
-O relatório de cada execução traz `tempos`, com o custo de cada estágio. Foi
-medindo isso que a duração caiu 42%: as duas chamadas à IA somavam 64% do total
-e eram sequenciais sem precisar ser, e o desfoque da sombra era recalculado a
-cada quadro para uma sombra que não muda. Otimizar o vídeo primeiro, que era a
-suspeita natural, teria rendido menos da metade.
+| Etapa | Tempo |
+|---|---|
+| Texto e arte (em paralelo) | 19,1 s |
+| Composição no produto | 3,4 s |
+| **Vídeo** | **135,1 s** |
+| Publicação e confirmação | 18,6 s |
 
-O material produzido: tendência *cultura gamer, paleta neon e cyber* → produto
-*Capinha iPhone 15 Pro* → gancho *"POV: sua capinha virou setup gamer"* → arte
-vetorial, mockup, vídeo vertical e post entregue.
+O vídeo domina porque o plano gratuito oferece uma fração de um núcleo e a
+codificação usa uma thread só. O mesmo vídeo leva 5 s em máquina comum.
 
-Execuções anteriores cobriram outras tendências do catálogo — *festa junina*
-produziu bandeirinhas, balões e fogueira; *ilustração botânica* produziu folhas
-de monstera e samambaia. A arte acompanha o tema, não é decoração fixa.
+O relatório de cada execução traz esses tempos no campo `tempos`. Foi medindo
+que a duração caiu de 305 s para 176 s — a suspeita inicial era outra.
 
-A confirmação não veio do log do próprio sistema, e sim da TikTok: o aplicativo
-notificou a conta com *"Seu conteúdo está pronto — Edite seu vídeo antes de
-compartilhar no TikTok"*. Ou seja, o vídeo saiu do código, foi hospedado, foi
-buscado pela TikTok, passou pelo processamento dela e chegou ao criador.
+### Evidência
 
-> **Sobre o modo de publicação.** A automação publica direto no perfil. Existe
-> um modo alternativo que entrega ao Creator Inbox da TikTok, onde um humano
-> finaliza pelo aplicativo — conceitualmente atraente, porque é ali que se
-> escolhe um som em alta, e som é o que faz um vídeo circular.
->
-> Ele foi o padrão por um tempo e se mostrou inviável na prática: a TikTok
-> aceita no máximo **5 rascunhos pendentes por conta em 24 horas** e não oferece
-> nenhuma forma de limpá-los pela API — só o aplicativo, um a um. Uma rodada de
-> testes trava a conta, e a saída é manual. Modo de teste que exige limpeza
-> manual não é modo de teste. Continua disponível por opção, com o custo
-> documentado.
+A confirmação não veio do log do próprio sistema. Numa das execuções em modo de
+revisão, o aplicativo do TikTok notificou a conta com *"Seu conteúdo está pronto
+— Edite seu vídeo antes de compartilhar"*. O vídeo saiu do código, foi
+hospedado, foi buscado pela plataforma, passou pelo processamento dela e chegou
+ao criador.
+
+Em publicação direta, o estado atravessa `publishing` por cerca de 20 segundos
+antes de virar `published` — latência real do processamento do TikTok, e a razão
+de o sistema acompanhar em vez de disparar e esquecer.
 
 ---
 
-## Por que a IA gera a **arte**, não o vídeo inteiro
+## Decisões de arquitetura
 
-Esta é a decisão de arquitetura central do projeto.
+### Por que a IA gera a arte, não o vídeo inteiro
 
 Pedir a um modelo de vídeo *"uma capinha da GoCase com arte retrô dos anos 90"*
 devolve um celular genérico, com arte aproximada e texto ilegível. Modelos de
@@ -126,23 +237,16 @@ vídeo não renderizam produto específico com fidelidade — e, mais importante
 
 O que a GoCase vende é a arte. Então a arte é o que a IA gera, na proporção real
 da área de impressão do produto — alta, cerca de 1:2, não quadrada. A composição
-no produto é feita por código, o que garante que a capinha do vídeo é exatamente
-a capinha que a fábrica produziria.
+no produto é feita por código, garantindo fidelidade.
 
-O movimento vem depois, e na maior parte das execuções nem precisa de IA: como a
-arte é vetorial, a própria montagem dela vira animação.
+Resultado: **cada execução produz um ativo de negócio reutilizável**, não só um
+post descartável. O arquivo `.svg` fica salvo ao lado do `.png` — vetor escala
+sem perda e separa cores para impressão, que é o formato certo para produção sob
+demanda.
 
-O resultado é que **cada execução produz um ativo de negócio reutilizável**, não
-só um post descartável.
+### Por que não a API oficial do TikTok diretamente
 
----
-
-## Por que não a API oficial da TikTok
-
-Registro de decisão de engenharia, porque a pergunta é legítima.
-
-A Content Posting API da TikTok existe e funciona. Mas tem **dois portões
-distintos**, que costumam ser confundidos:
+A Content Posting API existe e funciona, mas tem **dois portões distintos**:
 
 | Portão | O que libera |
 |---|---|
@@ -150,162 +254,104 @@ distintos**, que costumam ser confundidos:
 | **Audit** | tira a restrição de visibilidade |
 
 Enquanto o cliente de API **não é auditado**, a documentação oficial é
-explícita: todo post sai em `SELF_ONLY`, a conta do usuário precisa estar
-privada no momento da publicação, e o limite é de 5 usuários por 24 horas. Ou
-seja — o post existe, e ninguém além do dono o vê.
+explícita: todo post sai em `SELF_ONLY`, a conta precisa estar privada no
+momento da publicação, e o limite é de 5 usuários por 24 horas. O post existe, e
+ninguém além do dono o vê.
 
-E a auditoria exige uma **interface inspecionável**: tela de publicação com
-avatar e nome do criador, seletor de privacidade, toggles de Duet, Stitch e
-comentários, e divulgação de conteúdo comercial. Um fluxo n8n headless não tem
-interface a auditar. **Não é uma questão de prazo — é inaprovável por
-definição.**
+A auditoria exige uma **interface inspecionável**: tela de publicação com avatar
+e nome do criador, seletor de privacidade, toggles de Duet, Stitch e
+comentários, e divulgação de conteúdo comercial. Um fluxo headless não tem
+interface a auditar. **Não é questão de prazo — é inaprovável por definição.**
 
-A solução legítima é o modelo de parceiro desenhado pela própria TikTok: um
-cliente já auditado atua como transporte, e o usuário autoriza a conta pela
-tela de autorização do `tiktok.com` — nunca entregando senha a terceiro.
+A solução legítima é o modelo de parceiro desenhado pela própria plataforma: um
+cliente já auditado atua como transporte, e a conta é autorizada pela tela de
+autorização do `tiktok.com` — nunca entregando senha a terceiro.
 
-O transporte escolhido foi o **Zernio**. A escolha foi decidida por teste, não
-por marketing: a recomendação inicial era outro serviço, com nó n8n oficial. O
-teste de aceitação — conectar a conta e publicar manualmente, conferindo se o
-post sai público — inverteu a decisão.
+A escolha do transporte foi decidida por teste, não por marketing: a
+recomendação inicial era outro serviço, com nó n8n oficial. O teste de aceitação
+— conectar a conta e publicar manualmente, conferindo se o post sai público —
+inverteu a decisão.
 
-Os campos de conformidade não são opcionais e estão no código:
+### Conformidade não é opcional
 
 | Campo | Valor | Por quê |
 |---|---|---|
-| `video_made_with_ai` | `true` | O conteúdo é gerado por IA. Exigência de política da TikTok. |
-| `commercialContentType` | `brand_organic` | A GoCase promove o próprio negócio, não parceria paga. |
+| `video_made_with_ai` | `true` | O conteúdo é gerado por IA. Exigência de política. |
+| `commercialContentType` | `brand_organic` | Promoção do próprio negócio, não parceria paga. |
 | `content_preview_confirmed` | `true` | Exigência legal da plataforma. |
 | `express_consent_given` | `true` | Exigência legal da plataforma. |
 
----
+### Guardrails de marca verificados por código
 
-## Armadilhas de plataforma tratadas no código
+As proibições vivem no `config.yaml` e entram no prompt **e** são conferidas
+depois da geração. Se o texto violar uma regra, o pipeline barra em vez de
+publicar.
 
-Quase todos os itens abaixo vieram da documentação do fornecedor, antes de
-quebrarem. A exceção está marcada — e é justamente a que nenhuma leitura teria
-encontrado.
-
-| Armadilha | Tratamento |
-|---|---|
-| Ferramentas de workflow reusam `x-request-id`; chamadas seguintes devolvem o post da primeira, silenciosamente | UUID novo por chamada |
-| Conteúdo idêntico na mesma conta em 24h retorna HTTP 409 | O seletor evita combinações recentes e registra histórico |
-| Níveis de privacidade variam por criador; usar um inválido faz o post falhar | Consulta `creator-info` antes e rebaixa para uma opção permitida |
-| ~13% de falha de publicação na plataforma | Polling de status até o estado final; nunca fire-and-forget |
-| Upload direto recusa acima de 25 MB | Verificação antes do envio e recompressão automática |
-| Google Drive e Dropbox devolvem HTML, não vídeo | A mídia é hospedada pelo próprio transporte |
-| Vídeo sem faixa de áudio processa de forma menos confiável | Faixa silenciosa injetada quando a origem não tem áudio |
-| Conta pode estar no limite diário sem que a publicação avise | `canPostMore` é consultado antes; 429 vira mensagem legível |
-| Conta conectada mas com token morto falha tarde e mal | Contas com `needsReconnection` são descartadas na descoberta |
-| Conteúdo de parceria paga é recusado com visibilidade privada | Combinação `brand_content` + `SELF_ONLY` é barrada antes do envio |
-| **Descoberta em produção:** máximo de 5 rascunhos pendentes por conta em 24h — e `creator-info` reporta `canPostMore: true` mesmo com a fila cheia, porque mede a cota de publicação e não a de rascunhos | Erro é traduzido em instrução: finalize rascunhos no aplicativo ou publique direto |
-
----
-
-## Camada de IA — e onde ela **não** decide
-
-A IA escreve o conceito e o texto. Ela não tem a palavra final sobre o que vai
-ao ar.
-
-As proibições de marca vivem no `config.yaml` (preço, prazo de entrega,
-comparação com concorrente, superlativo sem lastro, saúde/política/religião).
-Elas entram no prompt **e são verificadas por código depois da geração**. Se o
-texto violar uma regra, o pipeline barra em vez de publicar.
-
-O motivo é simples: **modelo de linguagem é bom em seguir instrução, mas não é
-mecanismo de garantia.** Confiar só no prompt é confiar na sorte.
-
-A verificação normaliza acentos antes de comparar — sem isso, *"revolucionária"*
-seria barrado e *"revolucionaria"* passaria, e um modelo produz as duas formas.
+O motivo: **modelo de linguagem é bom em seguir instrução, mas não é mecanismo
+de garantia.** A verificação normaliza acentos antes de comparar — sem isso
+*"revolucionária"* seria barrado e *"revolucionaria"* passaria, e um modelo
+produz as duas formas.
 
 O formato da resposta também não é pedido por prompt: é imposto pela API via
-JSON Schema (`output_config.format`). Pedir "responda em JSON" e torcer é o modo
-mais comum de quebrar pipeline em produção.
+JSON Schema. Pedir "responda em JSON" e torcer é o modo mais comum de quebrar
+pipeline em produção.
+
+### Por que jobs assíncronos
+
+A geração leva minutos. Nenhum request HTTP síncrono sobrevive a isso — nem no
+n8n, nem em plano gratuito, nem em proxy nenhum. O fluxo dispara, recebe um
+`job_id` e consulta até o estado final.
+
+O polling tem um efeito colateral útil: mantém tráfego constante, o que impede o
+serviço de hibernar no meio do trabalho.
 
 ---
 
 ## Degradação graciosa
-
-O pipeline nunca trava por indisponibilidade de IA de mídia.
 
 A arte tem três caminhos, tentados em ordem:
 
 | # | Caminho | O que entrega | `etapas.arte` |
 |---|---|---|---|
 | 1 | Gerador de imagem | maior alcance visual: textura, pintura, grão | `imagem_ia` |
-| 2 | Vetor desenhado pela IA de texto | acerta o tema; SVG escala sem perda e separa cores | `vetor_ia` |
+| 2 | Vetor desenhado pela IA de texto | acerta o tema; escala sem perda e separa cores | `vetor_ia` |
 | 3 | Composição geométrica local | sempre disponível, na paleta da marca | `local` |
 
 O vídeo tem dois: animação por IA sobre o mockup, ou aproximação lenta em
-FFmpeg sobre o mesmo mockup.
+FFmpeg.
 
-O logotipo do encerramento segue a mesma regra: o arquivo não é versionado —
-é material de marca de terceiro e o repositório é público. Sem ele o vídeo é
-montado sem assinatura e o relatório registra `logo: ausente`, em vez de a
-publicação falhar por causa de um ativo decorativo.
+**Isto não é hipótese.** O plano gratuito do provedor de imagem concede
+`limit: 0` para geração de imagem e de vídeo — cota inexistente, não limite por
+minuto. O pipeline caiu para o caminho 2 sozinho, e é ele que produz o material
+das execuções registradas aqui.
 
-**Isto não é hipótese — foi exercitado.** O plano gratuito do provedor de
-imagem concede `limit: 0` para geração de imagem e de vídeo; a cota exige
-faturamento com aporte mínimo. O pipeline caiu para o caminho 2 sozinho, e o
-resultado da seção anterior é justamente esse caminho. A automação entregou sem
-intervenção, e o relatório registrou qual rota usou.
+O logotipo do encerramento segue a mesma regra: ausente, o vídeo é montado sem
+assinatura e o relatório registra `logo: ausente`. Ativo decorativo não derruba
+publicação.
 
-Vetor, aliás, é o formato mais adequado à produção sob demanda: escala para
-qualquer tamanho de capinha sem perder qualidade e separa cores para impressão.
-O `.svg` fica salvo ao lado do `.png` — é o arquivo que a fábrica usaria.
-
-Como efeito colateral do desenho, **a suíte de testes roda sem nenhuma
-credencial**.
+Efeito colateral do desenho: **a suíte de testes roda sem nenhuma credencial.**
 
 ---
 
-## Arquitetura
+## Armadilhas de plataforma tratadas no código
 
-Responsabilidade única por módulo — cada arquivo faz uma coisa e é testável
-isoladamente.
+Quase todos os itens vieram da documentação do fornecedor, antes de quebrarem.
+As exceções estão marcadas.
 
-| Módulo | Responsabilidade |
+| Armadilha | Tratamento |
 |---|---|
-| `src/tendencia.py` | Seleciona sinal e produto; evita repetir combinações. |
-| `src/criativo.py` | IA de texto com schema imposto; verifica os guardrails de marca. |
-| `src/arte.py` | Gera a arte imprimível. Caminho de IA e caminho local. |
-| `src/mockup.py` | Compõe a arte na capinha. Garante fidelidade de produto. |
-| `src/video.py` | Anima e normaliza para a especificação da TikTok. |
-| `src/publicador.py` | Publicação e confirmação de status. Trata as armadilhas da plataforma. |
-| `src/agente.py` | `executar_pipeline`: o fluxo completo, em uma função só. |
-| `src/config.py` | Carrega `config.yaml` com fallback embutido. |
-| `api.py` | Superfície HTTP com jobs assíncronos. |
-| `main.py` | Execução por terminal, para desenvolvimento e evidência. |
-
-**Fonte única de verdade.** O fluxo vive em `executar_pipeline`; a API HTTP, o
-terminal e os testes chamam a mesma função. Nenhum deles reimplementa etapa.
-
-**Por que jobs assíncronos.** A geração de vídeo leva de 1 a 3 minutos. Nenhum
-request HTTP síncrono sobrevive a isso — nem no n8n, nem em plano gratuito, nem
-em proxy nenhum. O n8n dispara, recebe um `job_id` e consulta até o estado
-final. O polling ainda mantém tráfego constante, o que impede o serviço de
-hibernar no meio da execução.
-
-### Tecnologias
-
-Python 3.12+ · Pillow (composição e animação por quadros) · svglib, reportlab e pypdfium2
-(rasterização vetorial) · FFmpeg via `imageio-ffmpeg` · FastAPI e uvicorn (API
-HTTP) · PyYAML (configuração externa) · Anthropic Claude (redação e arte
-vetorial, ambas com schema imposto) · Google Gemini (imagem e vídeo, opcional) ·
-Zernio (transporte de publicação) · n8n (orquestração low-code) · Render
-(hospedagem).
-
-Nenhuma dependência de biblioteca do sistema. FFmpeg e o rasterizador de PDF
-vêm como binário dentro do pacote pip — decisão tomada para que o projeto suba
-num runtime onde não existe `apt-get`.
-
-### Controle de custo
-
-Geração de imagem e de vídeo por IA têm preços muito diferentes — vídeo custa
-cerca de 30 vezes mais por execução. Por isso cada uma tem seu próprio
-interruptor no `config.yaml` (`usar_ia_imagem`, `usar_ia_video`), e o vídeo vem
-desligado. Habilitar faturamento no provedor não deve abrir as duas torneiras
-sem alguém escolher.
+| Ferramentas de workflow reusam `x-request-id`; chamadas seguintes devolvem o post da primeira, silenciosamente | UUID novo por chamada |
+| Conteúdo idêntico na mesma conta em 24h retorna HTTP 409 | O seletor evita combinações recentes e registra histórico |
+| Níveis de privacidade variam por criador; usar um inválido faz o post falhar | Consulta `creator-info` antes e rebaixa para uma opção permitida |
+| ~13% de falha de publicação na plataforma | Polling até o estado final; nunca fire-and-forget |
+| Upload direto recusa acima de 25 MB | Verificação antes do envio e recompressão automática |
+| Serviços de nuvem de arquivos devolvem HTML, não vídeo | A mídia é hospedada pelo próprio transporte |
+| Vídeo sem faixa de áudio processa de forma menos confiável | Faixa silenciosa injetada quando a origem não tem áudio |
+| Conta pode estar no limite diário sem que a publicação avise | `canPostMore` é consultado antes; 429 vira mensagem legível |
+| Conta conectada mas com token morto falha tarde e mal | Contas com `needsReconnection` são descartadas na descoberta |
+| Conteúdo de parceria paga é recusado com visibilidade privada | Combinação inválida é barrada antes do envio |
+| **Descoberta em produção:** máximo de 5 rascunhos pendentes por conta em 24h — e a consulta de capacidade reporta que a conta pode postar, porque mede a cota de publicação e não a de rascunhos | Erro traduzido em instrução acionável |
+| **Descoberta em produção:** jobs vivem em memória e somem se o serviço reiniciar | O fluxo n8n tolera 404 na consulta e ramifica para falha tratada |
 
 ---
 
@@ -313,104 +359,114 @@ sem alguém escolher.
 
 Tudo que um time de marketing ajustaria vive no `config.yaml`, fora do código:
 
-- **Voz e paleta da marca** — trocar a paleta repinta todo o material gerado.
-- **Proibições** — a lista que os guardrails verificam.
-- **Catálogo de produtos** — SKU, nome, linha e área de impressão.
-- **Sinais de tendência** — tema e público de cada gatilho.
-- **Especificação do vídeo** — resolução, duração, taxa de quadros.
-- **Parâmetros de publicação** — privacidade, comentários, Duet, Stitch.
+- **Voz e paleta da marca** — trocar a paleta repinta todo o material gerado
+- **Proibições** — a lista que os guardrails verificam
+- **Catálogo de produtos** — SKU, nome, linha e área de impressão real
+- **Sinais de tendência** — tema e público de cada gatilho
+- **Especificação do vídeo** — resolução, duração, taxa de quadros
+- **Parâmetros de publicação** — privacidade, comentários, Duet, Stitch
+- **Interruptores de custo** — geração de imagem e de vídeo por IA, separados
 
 Configuração ausente ou inválida não derruba nada: o sistema avisa e usa os
-padrões embutidos.
+padrões embutidos. Credenciais nunca ficam em arquivo versionado — só em
+variáveis de ambiente.
 
-Credenciais nunca ficam em arquivo versionado nem no JSON do workflow — só em
-variáveis de ambiente. O contrato está em [`.env.example`](.env.example).
+### Controle de custo
+
+Geração de imagem e de vídeo por IA têm preços muito diferentes — vídeo custa
+cerca de 30 vezes mais por execução. Cada uma tem seu próprio interruptor, e o
+vídeo vem desligado. Habilitar faturamento no provedor não deve abrir as duas
+torneiras sem alguém escolher.
+
+---
+
+## Arquitetura do código
+
+Responsabilidade única por módulo:
+
+| Módulo | Responsabilidade |
+|---|---|
+| `src/tendencia.py` | Seleciona sinal e produto; evita repetir combinações |
+| `src/criativo.py` | IA de texto com schema imposto; verifica guardrails de marca |
+| `src/arte.py` | Gera a arte imprimível; três caminhos; rasteriza o vetor |
+| `src/mockup.py` | Compõe a arte na capinha; garante fidelidade de produto |
+| `src/video.py` | Monta o vídeo e normaliza para a especificação do TikTok |
+| `src/publicador.py` | Publica e confirma; trata as armadilhas da plataforma |
+| `src/agente.py` | `executar_pipeline`: o fluxo completo, em uma função só |
+| `src/config.py` | Carrega `config.yaml` com fallback embutido |
+| `api.py` | Superfície HTTP com jobs assíncronos |
+| `main.py` | Execução por terminal |
+
+**Fonte única de verdade.** O fluxo vive em `executar_pipeline`; a API HTTP, o
+terminal e os testes chamam a mesma função. Nenhum reimplementa etapa.
 
 ---
 
 ## Qualidade
 
-`testar.py` executa **41 verificações** sem exigir credencial: carga e
-degradação da configuração, rotação de tendências, os guardrails de marca caso a
-caso, o pipeline de mídia completo com conferência da especificação real do
-vídeo (H.264, yuv420p, 1080×1920, faixa de áudio, duração e tamanho), a
-integridade do workflow n8n (conexões e referências resolvem, sem credencial e
-sem caminho de disco), o parsing das respostas da API de publicação e o
-comportamento das superfícies quando falta chave.
+`testar.py` executa **40 verificações** sem exigir credencial: carga e
+degradação da configuração, rotação de tendências, guardrails caso a caso,
+pipeline de mídia completo com conferência da especificação real do vídeo,
+integridade do workflow n8n, parsing das respostas da API de publicação, área
+segura do texto e comportamento das superfícies quando falta chave.
 
-Defeitos reais encontrados durante a construção e cobertos por regressão:
+Defeitos reais encontrados durante a construção, agrupados por **como** foram
+descobertos — cada método pegou o que os outros não alcançavam:
 
-| Defeito | Como apareceu |
+| Método | Defeitos encontrados |
 |---|---|
-| Paleta da arte de reserva escapando da identidade da marca | Inspeção visual do material gerado |
-| Contraste insuficiente: a última linha do texto sumia sobre o produto | Inspeção visual de um quadro do vídeo |
-| Guardrail cego a superlativo sem acento | Teste caso a caso |
-| Guardrail com limite de palavra impedindo `eleic` de casar com `eleição` | Teste caso a caso |
-| Níveis de privacidade lidos como texto quando a API devolve objetos | Revisão linha a linha contra a documentação |
-| Dois conceitos distintos de "rascunho" tratados como um só | Revisão linha a linha contra a documentação |
-| Sombra da arte desenhada como retângulo sólido, lendo como moldura preta | Inspeção do vídeo montado |
-| Produto e CTA escritos sobre a arte na cena de abertura | Inspeção do vídeo montado |
-| Limite de 5 rascunhos pendentes por conta em 24h, não tratado | **Execução real repetida**, com a conta acumulando histórico |
+| **Revisão de documentação** | níveis de privacidade lidos como texto quando a API devolve objetos; dois conceitos distintos de "rascunho" tratados como um só |
+| **Inspeção visual do material** | paleta escapando da identidade; contraste insuficiente escondendo texto; sombra desenhada como moldura sólida; texto sobre a arte |
+| **Uso repetido em condição real** | limite de rascunhos pendentes; jobs perdidos em reinício de serviço |
+| **Medição instrumentada** | consumo de memória e custo por estágio |
 
-Dois merecem nota porque nenhum apareceria em teste que não olhasse o formato de
-resposta. O de privacidade rebaixaria toda publicação para um valor inválido. O
-de rascunho é mais sutil: o serviço de transporte tem um rascunho próprio, que
-guarda o post no painel dele e **nunca chega à TikTok** — enquanto a TikTok tem
-o Creator Inbox, que recebe a mídia de verdade. Tratar os dois como sinônimos
-faria o modo de teste não exercitar justamente o caminho que precisava ser
-testado.
+### Memória: 1011 MB → 193 MB
 
-O último é de outra natureza, e é o mais instrutivo. Nenhuma leitura de
-documentação e nenhum teste sintético o encontraria: o limite depende do
-histórico da conta nas últimas 24 horas, então só aparece depois de várias
-execuções reais e acumuladas. Pior, ele é invisível antes do envio — a consulta
-de capacidade do criador reporta que a conta pode postar, porque mede a cota de
-publicação e não a de rascunhos.
-
-Vale como registro de método: revisão de documentação pega uma classe de erro,
-inspeção visual pega outra, e uso repetido em condição real pega uma terceira
-que as duas primeiras não alcançam.
-
-Outras salvaguardas embutidas: geração de arte determinística (o mesmo conceito
-produz o mesmo arquivo, o que torna uma execução reproduzível); jobs expiram
-sozinhos em 1 hora; falha de publicação preserva a etapa onde parou; e status
-indeterminado nunca dispara republicação automática, para não duplicar post.
-
-### Memória: 1011 MB → 307 MB
-
-O serviço morria por estouro de memória no container de 512 MB assim que subiu.
-Medir por estágio, antes de mexer em qualquer coisa, mostrou que arte e mockup
-somavam menos de 110 MB e o FFmpeg sozinho usava 1011 MB. Três causas:
+O serviço morria por estouro no container de 512 MB. Medir por estágio mostrou
+que arte e composição somavam menos de 110 MB e o FFmpeg sozinho usava 1011 MB.
 
 | Causa | Efeito |
 |---|---|
 | `-threads` do FFmpeg não controla o threading interno do libx264 — é preciso `threads=1` dentro de `-x264-params` | 906 → 336 MB |
-| `-loop 1` na entrada bufferizava ~150 MB sem necessidade: o `zoompan` já multiplica o quadro único pelo parâmetro `d` | 336 → 192 MB |
-| O pipeline codificava duas vezes — gerava um MP4 intermediário e o relia para aplicar a legenda | 448 → 307 MB no pico total |
+| `-loop 1` numa entrada de imagem bufferiza ~150 MB por arquivo; repetir o quadro dentro do grafo de filtros custa 8 MB | 394 → 199 MB |
+| O pipeline codificava duas vezes: gerava um MP4 intermediário e o relia para aplicar o texto | 448 → 307 MB |
 
-A especificação exigida pela TikTok não mudou. A folga que tornou isso possível
-é o tamanho do arquivo: menos de 1 MB contra um teto de 25 MB, o que permite
-preset rápido com CRF baixo sem perda visível.
+Pico atual medido dentro do container: **193 MB**.
 
-Registro porque a primeira hipótese estava errada — reduzi o buffer do zoom
-achando que era ele, e custava 6 MB. A medição por estágio evitou horas
-otimizando o lugar errado.
+Vale o registro de método: a primeira hipótese estava errada em dois momentos
+distintos. Reduzir o buffer do zoom custava 6 MB. E as quedas do serviço que
+pareciam falta de memória eram, na verdade, redeploys disparados durante a
+própria execução — o que só ficou claro quando o serviço passou a reportar o
+próprio consumo.
 
 ---
 
 ## Escopo e evolução
 
-**Escopo desta entrega.** A publicação depende de um transporte com cliente
-auditado. Uma implementação direta contra a API oficial da TikTok exigiria
-construir a interface de publicação que a auditoria da plataforma requer — o
-que muda a natureza do projeto, de automação para produto. É um passo consciente
-do roadmap, não um esquecimento.
+### Limitações conhecidas
 
-A API sobe **sem autenticação**, por decisão de escopo do business case. Antes
-de operar com a conta real da marca, exige chave de acesso.
+**Áudio.** Não existe API de música licenciada — nem oficial da plataforma, nem
+por intermediário. O que faz um vídeo circular no TikTok é usar um som em alta,
+e isso só o aplicativo oferece. O vídeo sai com faixa silenciosa.
 
-**Evolução natural.** Ler sinais de tendência de uma fonte real (TikTok Creative
-Center, Google Trends) em vez do catálogo do `config.yaml`; realimentar o
-desempenho dos posts para priorizar os temas que converteram; ligar a arte
-aprovada direto na fila de produção, fechando o ciclo até a fábrica; e teste A/B
-de gancho sobre a mesma arte.
+Existe um modo alternativo que entrega ao Creator Inbox, onde um humano finaliza
+pelo aplicativo e escolhe o som. Ele não é o padrão porque a plataforma aceita
+no máximo 5 rascunhos pendentes por conta em 24 horas e não oferece forma de
+limpá-los pela API — uma rodada de testes trava a conta.
+
+**Autenticação.** A API sobe sem autenticação, por decisão de escopo do business
+case. Antes de operar com a conta real da marca, exige chave de acesso.
+
+**Auditoria.** Uma implementação direta contra a API oficial exigiria construir
+a interface de publicação que a auditoria requer — o que muda a natureza do
+projeto, de automação para produto.
+
+### Evolução natural
+
+- Ler sinais de tendência de fonte real (TikTok Creative Center, Google Trends)
+  em vez do catálogo do `config.yaml`
+- Realimentar o desempenho dos posts para priorizar os temas que converteram,
+  fechando o ciclo entre publicação e decisão
+- Ligar a arte aprovada direto na fila de produção, fechando o ciclo até a
+  fábrica
+- Teste A/B de gancho sobre a mesma arte, reaproveitando o ativo caro
