@@ -204,11 +204,12 @@ def conteudo() -> list:
     f += [
         h1("1. Sumário Executivo"),
         p(
-            "O Radar de Tendência transforma um sinal de tendência em uma capinha "
-            "publicada no TikTok sem nenhuma intervenção humana. Ele escolhe o tema e "
-            "o produto, escreve o texto com a voz da marca, desenha a arte imprimível, "
-            "compõe essa arte no produto, monta o vídeo vertical, publica na plataforma "
-            "e acompanha até a confirmação de que o post está no ar."
+            "O Radar de Tendência transforma uma tendência real em uma capinha "
+            "publicada no TikTok sem nenhuma intervenção humana. Ele lê o que o país "
+            "está pesquisando agora, decide o que disso pode virar estampa, escreve o "
+            "texto com a voz da marca, desenha a arte imprimível, compõe essa arte no "
+            "produto, monta o vídeo vertical, publica na plataforma e acompanha até a "
+            "confirmação de que o post está no ar."
         ),
         p(
             "A GoCase fabrica sob demanda, o que significa que não há estoque a escoar "
@@ -223,12 +224,13 @@ def conteudo() -> list:
         tabela(
             ["Métrica", "Valor"],
             [
-                ["Tempo total, do sinal ao post confirmado", "64,4 segundos"],
+                ["Tempo total, da tendência ao post confirmado", "82,5 segundos"],
                 ["Intervenção humana", "nenhuma"],
                 ["Estado final na plataforma", "published (publicado)"],
-                ["Custo por execução", "cerca de US$ 0,04"],
+                ["Custo por execução", "cerca de US$ 0,05"],
                 ["Vídeo entregue", "1080×1920, H.264, 30 fps, 8 segundos"],
                 ["Ativo reaproveitável gerado", "arte vetorial imprimível (.svg)"],
+                ["Tendências lidas e triadas", "10 lidas, 10 recusadas com motivo"],
             ],
             [8.5, 8.5],
         ),
@@ -261,7 +263,8 @@ def conteudo() -> list:
         ),
         h2("O que a automação faz — e o que não faz"),
         p(
-            "<b>Dentro do escopo:</b> selecionar tema e produto, redigir o texto sob as "
+            "<b>Dentro do escopo:</b> ler as tendências reais e triá-las, selecionar tema "
+            "e produto, redigir o texto sob as "
             "regras de marca, gerar a arte imprimível, compor o mockup do produto, "
             "montar o vídeo na especificação da plataforma, publicar e confirmar."
         ),
@@ -275,6 +278,46 @@ def conteudo() -> list:
 
     # ------------------------------------------------------------------ 3. uso
     f += [
+        h2("O radar, e por que ele recusa quase tudo"),
+        p(
+            "O sistema lê o que o país está pesquisando agora e decide o que disso "
+            "pode virar estampa. A parte contraintuitiva é que sua função principal "
+            "é <b>recusar</b>. Numa leitura real, as dez altas do momento eram "
+            "política, processo judicial, notícia financeira, clube de futebol, nome "
+            "de pessoa e um provável acidente rodoviário. Nenhuma virava estampa, e "
+            "várias violavam diretamente as regras da marca."
+        ),
+        bloco(
+            tabela(
+                ["Barrado sem exceção", "Motivo"],
+                [
+                    ["Política, eleição, processo, investigação", "Regra de marca e risco reputacional"],
+                    ["Tragédia, acidente, crime, morte, doença", "Não se estampa desgraça"],
+                    ["Pessoa real — artista, atleta, influenciador", "Direito de imagem"],
+                    ["Marca, empresa, produto de terceiro", "Propriedade alheia"],
+                    ["Clube, seleção, competição com dono", "Propriedade de marca"],
+                    ["Notícia factual sem carga visual", "Não há o que desenhar"],
+                ],
+                [7.5, 9.5],
+            ),
+        ),
+        p(
+            "Passa apenas o que cumpre quatro condições ao mesmo tempo: é estético, "
+            "cultural ou sazonal e não notícia; tem forma, cor ou textura que um "
+            "ilustrador desenharia; interessa a alguém de 16 a 32 anos; e é algo que "
+            "a pessoa carregaria no bolso o dia inteiro. Na dúvida, recusa. Ao "
+            "aprovar, o assunto é reescrito como tema de estampa e o nome próprio "
+            "que o originou desaparece."
+        ),
+        nota(
+            "Verificado nos dois sentidos, porque testar só a recusa deixaria o "
+            "caminho de aprovação sem prova: contra a leitura real, dez recusados e "
+            "nenhum aprovado; contra uma lista preparada com casos aprováveis, três "
+            "aprovados e quatro recusados. Quando nada passa — o caso mais comum — a "
+            "escolha volta ao catálogo curado, e o relatório registra a origem do "
+            "tema e o motivo de cada recusa."
+        ),
+
         h1("3. Como a Automação é Usada"),
         p(
             "Do ponto de vista de quem opera, a execução é um clique. O fluxo de "
@@ -332,8 +375,8 @@ def conteudo() -> list:
             ["Etapa", "O que faz"],
             [
                 [
-                    "1. Seleção",
-                    "Escolhe um sinal de tendência e um produto do catálogo, evitando "
+                    "1. Radar",
+                    "Lê as tendências reais, faz a triagem e escolhe o tema e o produto, evitando "
                     "combinações recentes.",
                 ],
                 [
@@ -775,8 +818,8 @@ def conteudo() -> list:
         tabela(
             ["Dimensão", "Antes (processo manual)", "Depois (automação)"],
             [
-                ["Tempo até o post no ar", "Dias", "64 segundos"],
-                ["Custo por peça", "Horas de designer e redator", "Cerca de US$ 0,04"],
+                ["Tempo até o post no ar", "Dias", "82 segundos"],
+                ["Custo por peça", "Horas de designer e redator", "Cerca de US$ 0,05"],
                 [
                     "Volume viável",
                     "Limitado pela agenda da equipe",
@@ -850,8 +893,8 @@ def conteudo() -> list:
                 ["CPU", "0,1 de um núcleo", "2 núcleos dedicados"],
                 ["Memória", "512 MB", "4 GB"],
                 ["Custo mensal", "US$ 7,00 (plano equivalente)", "cerca de US$ 0,50"],
-                ["Execução completa", "176,2 s", "64,4 s"],
-                ["Etapa de vídeo", "135,1 s", "10,2 s"],
+                ["Execução completa", "176,2 s", "82,5 s"],
+                ["Etapa de vídeo", "135,1 s", "12,7 s"],
             ],
             [4.0, 6.5, 6.5],
         ),

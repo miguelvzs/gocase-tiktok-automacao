@@ -1,8 +1,13 @@
 # Radar de Tendência — GoCase
 
-Automação que transforma **um sinal de tendência em uma capinha publicada no
-TikTok**, sem intervenção humana: escolhe o tema, escreve o texto, cria a arte,
-compõe o produto, monta o vídeo vertical, publica e confirma o resultado.
+Automação que transforma **uma tendência real em uma capinha publicada no
+TikTok**, sem intervenção humana: lê o que o Brasil está pesquisando agora,
+decide o que disso pode virar estampa, escreve o texto, cria a arte, compõe o
+produto, monta o vídeo vertical, publica e confirma o resultado.
+
+A parte que dá nome ao projeto é a mais contraintuitiva: **o radar existe
+principalmente para recusar.** Quase tudo que está em alta é notícia, e notícia
+não vira estampa — ver [O radar: o trabalho é recusar](#o-radar-o-trabalho-é-recusar).
 
 Business case para o processo seletivo de Estágio em RPA na **GoCase (GoGroup)**.
 Área de negócio: Marketing e Aquisição.
@@ -15,6 +20,7 @@ Business case para o processo seletivo de Estágio em RPA na **GoCase (GoGroup)*
 ## Sumário
 
 - [O problema](#o-problema)
+- [O radar: o trabalho é recusar](#o-radar-o-trabalho-é-recusar)
 - [Como funciona na prática](#como-funciona-na-prática)
 - [O que acontece em cada execução](#o-que-acontece-em-cada-execução)
 - [Quem faz o quê](#quem-faz-o-quê)
@@ -46,6 +52,85 @@ ninguém no meio.**
 
 ---
 
+## O radar: o trabalho é recusar
+
+O projeto se chama Radar de Tendência. A primeira versão lia um arquivo YAML —
+o que é um catálogo, não um radar. A ligação com o mundo é o feed público do
+**Google Trends**: endpoint oficial, sem chave e sem dependência nova.
+
+O que decidiu o desenho não foi a fonte, foi **olhar o que ela devolve**. Numa
+leitura real do Brasil:
+
+```
+8 de janeiro · deltan dallagnol · banco master · tribunal de contas
+liga dos campeões · fenerbahçe · mg-188 · bianca andrade
+balanço da copa · climatização
+```
+
+Política, processo judicial, notícia financeira, clube de futebol, nome de
+pessoa e provável acidente rodoviário. **Nenhum vira estampa**, e vários violam
+diretamente as proibições de marca.
+
+Um radar ingênuo teria tentado desenhar uma capinha do 8 de janeiro. Daí a
+inversão que dá nome a esta seção: **a função principal da triagem não é
+aprovar, é recusar.** Devolver lista vazia é resultado correto e esperado.
+
+### O que é barrado, sem exceção
+
+| Categoria | Por quê |
+|---|---|
+| Política, eleição, processo, investigação | Proibição de marca e risco reputacional |
+| Tragédia, acidente, crime, morte, doença | Não se estampa desgraça |
+| Pessoa real — artista, atleta, influenciador | Nome de gente não se imprime sem direito de imagem |
+| Marca, empresa, banco, produto de terceiro | Propriedade alheia |
+| Clube, seleção, competição com dono | Propriedade de marca |
+| Notícia factual sem carga visual | Não há o que desenhar |
+
+### O que passa
+
+Precisa cumprir as quatro condições ao mesmo tempo: ser estético, cultural ou
+sazonal, e não notícia; ter forma, cor ou textura que um ilustrador desenharia;
+interessar a alguém de 16 a 32 anos; e ser algo que a pessoa carregaria no bolso
+o dia inteiro. **É roupa, não manchete.** Na dúvida, recusa.
+
+Ao aprovar, o assunto é reescrito como tema de estampa e o nome próprio some.
+Uma alta em `são joão 2026` vira "festa junina com bandeirinhas e clima de
+arraial" — o tema, não o evento.
+
+### Medido nos dois sentidos
+
+Testar só a recusa deixaria o caminho de aprovação como código morto.
+
+| Entrada | Aprovados | Recusados |
+|---|---|---|
+| Leitura real do Google Trends BR | **0** | **10** |
+| Lista injetada com casos aprováveis | **3** | **4** |
+
+Na lista injetada, `estetica cottagecore`, `sao joao 2026` e `unhas cromadas
+aura` passaram; `8 de janeiro`, `deltan dallagnol`, `acidente br-101` e
+`flamengo` foram barrados — este último como propriedade de marca.
+
+### O catálogo não é plano B
+
+Quando nada passa, a escolha volta para o catálogo curado de 14 movimentos
+estéticos. Esse é o caminho mais frequente, e é o certo: a automação publica de
+qualquer forma, e o que muda é a origem do assunto.
+
+O relatório de cada execução registra `etapas.origem_do_tema` (`radar` ou
+`catalogo`) e a lista de recusas com o motivo de cada uma — o que torna a
+triagem auditável em vez de opaca.
+
+### Nada disso pode derrubar uma publicação
+
+Fonte fora do ar, feed vazio, triagem falhando ou credencial ausente: todos os
+casos devolvem lista vazia e o catálogo assume. Uma fonte externa instável não
+tem poder de parar o pipeline.
+
+**Custo:** cerca de 8 s no início da execução — leitura do feed mais uma chamada
+de triagem com esforço baixo, porque classificar não é criar.
+
+---
+
 ## Como funciona na prática
 
 Três formas de disparar, todas chamando o mesmo código:
@@ -68,7 +153,7 @@ estágio.
 ## O que acontece em cada execução
 
 ```
-1. SELEÇÃO      catálogo de produtos + sinais de tendência
+1. RADAR        tendências reais → triagem → tema aprovado ou catálogo
                         ↓
 2. CRIAÇÃO      texto e arte, em paralelo
                         ↓
@@ -81,12 +166,20 @@ estágio.
 6. CONFIRMAÇÃO  acompanha até o estado final
 ```
 
-### 1. Seleção — de onde vem o assunto
+### 1. Radar — de onde vem o assunto
 
-Lê um catálogo de produtos (SKU, nome, linha, área de impressão) e uma lista de
-sinais de tendência (tema, público e **linguagem visual**). Escolhe uma
-combinação, evitando as recentes: conteúdo repetido é recusado pela plataforma
-de publicação dentro de 24 horas.
+Busca o que o Brasil está pesquisando agora no feed público do Google Trends e
+submete cada termo a uma triagem. O que passa vira tema de estampa; o que não
+passa é registrado com o motivo. Quando nada passa — o caso mais comum —, o
+catálogo curado assume.
+
+O detalhe que define o desenho está na seção
+[O radar: o trabalho é recusar](#o-radar-o-trabalho-é-recusar).
+
+Em seguida entra o produto: um catálogo com SKU, nome, linha e área de
+impressão. A combinação escolhida evita as recentes, porque conteúdo repetido é
+recusado pela plataforma de publicação dentro de 24 horas — e o histórico dessas
+combinações vive num volume, para sobreviver ao deploy.
 
 Cada sinal é um movimento estético específico — Y2K cromado, coquette, traço de
 mangá, grafite — e não uma categoria vaga. A diferença aparece no desenho:
@@ -157,6 +250,7 @@ em instruções acionáveis.
 
 | Tecnologia | Papel |
 |---|---|
+| **Google Trends** | Fonte de tendências reais, pelo feed público. Sem chave, sem SDK, sem raspagem. Preferido ao `pytrends`, que raspa e quebra. |
 | **n8n** | Orquestra o fluxo: dispara o trabalho, acorda o serviço, consulta o estado em laço, ramifica entre sucesso e falha e monta o relatório. Ferramenta low-code, sem código no fluxo. |
 | **HTTP Request node** | Faz as chamadas à API. Não existe nó nativo de TikTok no n8n — o único da comunidade está marcado pelo próprio autor como não funcional. |
 
@@ -164,6 +258,7 @@ em instruções acionáveis.
 
 | Tecnologia | Papel |
 |---|---|
+| **Claude (Anthropic)** | Faz a **triagem das tendências**: decide o que pode virar estampa e recusa política, tragédia, pessoa real e marca de terceiro, com o motivo de cada recusa. |
 | **Claude (Anthropic)** | Escreve o conteúdo — gancho, legenda, CTA, hashtags — com a voz da marca e as proibições do catálogo. Formato garantido por JSON Schema, não por instrução no prompt. |
 | **Claude (Anthropic)** | Desenha a arte da capinha em **SVG**, a partir da tendência, do público e do produto. Escolhe a paleta pelo tema e declara o conceito visual antes de desenhar. |
 | **Google Gemini** | Caminho preferencial para a arte quando há cota: gerador de imagem, com maior alcance visual (textura, pintura, grão). Opcional. |
@@ -205,12 +300,13 @@ Execução real, conta de teste, publicação pública, sem intervenção manual
 
 | Métrica | Valor |
 |---|---|
-| Tempo total, do sinal à confirmação | **64 s** no serviço publicado · ~25 s em máquina local |
+| Tempo total, da tendência à confirmação | **82 s** no serviço publicado |
 | Tempo para acordar o serviço parado | 5,6 s |
-| Custo por execução | ~US$ 0,04 em IA · ~US$ 0,0015 em processamento |
-| Pico de memória no container | 185 MB, contra um teto de 4096 MB |
+| Tendências lidas e triadas | 10 lidas · 10 recusadas · tema veio do catálogo |
+| Custo por execução | ~US$ 0,05 em IA · ~US$ 0,002 em processamento |
+| Pico de memória no container | 360 MB, contra um teto de 4096 MB |
 | Vídeo entregue | 1080×1920, H.264 yuv420p, 30 fps, faixa AAC, 8,00 s |
-| Tamanho do arquivo | 0,74 MB, contra um teto de 25 MB |
+| Tamanho do arquivo | 0,92 MB, contra um teto de 25 MB |
 | Estado final | `published` |
 | Intervenção humana | nenhuma |
 
@@ -219,26 +315,34 @@ hospedagens:
 
 | Etapa | plano gratuito anterior (0,1 CPU) | Fly `performance-2x` |
 |---|---|---|
-| Texto e arte (em paralelo) | 19,1 s | 23,6 s |
-| Composição no produto | 3,4 s | 0,6 s |
-| **Vídeo** | **135,1 s** | **10,2 s** |
-| Publicação e confirmação | 18,6 s | 29,9 s |
-| **Total** | **176,2 s** | **64,4 s** |
+| Radar: leitura e triagem | — | 7,7 s |
+| Texto e arte (em paralelo) | 19,1 s | 34,8 s |
+| Composição no produto | 3,4 s | 2,6 s |
+| **Vídeo** | **135,1 s** | **12,7 s** |
+| Publicação e confirmação | 18,6 s | 24,9 s |
+| **Total** | **176,2 s** | **82,5 s** |
 
-O vídeo ficou **13 vezes mais rápido** e passou de 77% para 16% do tempo total.
-O que sobra é latência de rede alheia: as etapas de IA e de publicação variam de
-execução para execução conforme os provedores respondem, e nenhuma hospedagem
-as move. É por isso que a redução total foi de 63%, e não do mesmo fator do
-vídeo.
+O vídeo ficou **11 vezes mais rápido** e passou de 77% para 15% do tempo total.
+O que domina agora são as chamadas de IA e a latência da plataforma — coisas que
+nenhuma hospedagem move.
+
+Duas linhas subiram de propósito, e vale dizer por quê. O radar são 7,7 s que
+não existiam: é o preço de ler o mundo em vez de um arquivo. E a arte passou de
+23,6 s para 34,8 s ao ganhar densidade mínima, planejamento de composição antes
+do desenho e teto de tokens maior. **A automação ficou 18 s mais lenta e o
+produto ficou melhor** — troca aceita conscientemente, com o número na mesa.
 
 Vale registrar a previsão feita antes da migração: **~48 s totais, com o vídeo
-em ~8 s.** O vídeo saiu em 10,2 s, perto. O total saiu em 64,4 s, longe — porque
-a estimativa tratou as etapas de rede como constantes, e elas não são. A parte
-que dependia de hardware era previsível; a que dependia de terceiros, não.
+em ~8 s.** O vídeo saiu em 10,2 s na primeira medição, perto. O total saiu em
+64,4 s, longe — porque a estimativa tratou as etapas de rede como constantes, e
+elas não são. A parte que dependia de hardware era previsível; a que dependia de
+terceiros, não.
 
 O relatório de cada execução traz esses tempos no campo `tempos`. A duração caiu
 de 305 s para 176 s por medição dentro do ambiente antigo, e de 176 s para 64 s
-pela troca de hospedagem — as duas vezes contrariando a primeira hipótese.
+pela troca de hospedagem — as duas vezes contrariando a primeira hipótese. Depois
+subiu para 82 s ao ganhar o radar e a arte densa, e esse número está aqui porque
+regressão de tempo escondida é pior que regressão de tempo declarada.
 
 ### Evidência
 
@@ -523,6 +627,7 @@ Responsabilidade única por módulo:
 
 | Módulo | Responsabilidade |
 |---|---|
+| `src/radar.py` | Lê tendências reais e faz a triagem; recusa mais do que aprova |
 | `src/tendencia.py` | Seleciona sinal e produto; evita repetir combinações |
 | `src/criativo.py` | IA de texto com schema imposto; verifica guardrails de marca |
 | `src/arte.py` | Gera a arte imprimível; três caminhos; rasteriza o vetor |
@@ -596,6 +701,13 @@ pelo aplicativo e escolhe o som. Ele não é o padrão porque a plataforma aceit
 no máximo 5 rascunhos pendentes por conta em 24 horas e não oferece forma de
 limpá-los pela API — uma rodada de testes trava a conta.
 
+**Alcance do radar.** A fonte é o Google Trends, que mede *busca* — não moda
+visual. Tendência estética costuma nascer no TikTok e no Pinterest antes de
+virar busca no Google, e nenhuma das duas expõe esses dados publicamente. Na
+prática a triagem recusa quase tudo, e é o catálogo curado que sustenta a
+operação. O radar entrega auditoria e o caminho para uma fonte melhor, não um
+fluxo constante de temas.
+
 **Autenticação.** A API sobe sem autenticação, por decisão de escopo do business
 case. Antes de operar com a conta real da marca, exige chave de acesso.
 
@@ -605,8 +717,9 @@ projeto, de automação para produto.
 
 ### Evolução natural
 
-- Ler sinais de tendência de fonte real (TikTok Creative Center, Google Trends)
-  em vez do catálogo do `config.yaml`
+- Ampliar as fontes do radar para além do Google Trends — o Creative Center do
+  TikTok e o Pinterest capturam moda visual antes de ela virar busca, que é
+  onde a triagem hoje encontra pouco
 - Realimentar o desempenho dos posts para priorizar os temas que converteram,
   fechando o ciclo entre publicação e decisão
 - Ligar a arte aprovada direto na fila de produção, fechando o ciclo até a
