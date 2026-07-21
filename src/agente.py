@@ -139,9 +139,11 @@ def executar_pipeline(
             modelo=cfg["ia"]["modelo_texto"],
             max_tokens=cfg["ia"]["max_tokens"],
         )
+        diagnostico_arte: list[str] = []
         f_arte = executor.submit(
             arte.gerar,
             conceito=briefing,
+            diagnostico=diagnostico_arte,
             destino=destino / "arte.png",
             paleta=cfg["marca"]["paleta"],
             modelo=cfg["ia"]["modelo_imagem"],
@@ -160,6 +162,10 @@ def executar_pipeline(
     }
     relatorio["uso_ia"] = pacote.get("_uso", {})
     relatorio["etapas"]["arte"] = origem_arte
+    # Só aparece quando um caminho preferencial foi descartado. Sem isto, uma
+    # execução com a arte de reserva chega ao ar sem dizer o que deu errado.
+    if diagnostico_arte:
+        relatorio["etapas"]["arte_descartada"] = diagnostico_arte
     cronometrar("criativo_e_arte")
 
     # 4. Composição no produto — garante fidelidade que IA de vídeo não dá

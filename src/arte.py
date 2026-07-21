@@ -69,12 +69,21 @@ def gerar(
     tamanho: tuple[int, int] = (1024, 1024),
     chave_anthropic: str | None = None,
     modelo_texto: str = "claude-opus-4-8",
+    diagnostico: list[str] | None = None,
 ) -> tuple[Path, str]:
     """Produz a arte.
 
     Devolve `(caminho, origem)` com origem em `imagem_ia`, `vetor_ia` ou
     `local`, na ordem de preferência descrita no topo do módulo.
+
+    `diagnostico` recebe o motivo de cada caminho descartado. A degradação
+    silenciosa é boa para não derrubar a publicação e péssima para entender o
+    que aconteceu: uma execução chegou ao ar com a arte de reserva e o relatório
+    dizia apenas `arte: local`, sem dizer por quê — e a retenção de log do
+    provedor já havia descartado a linha. O motivo agora viaja junto do
+    resultado.
     """
+    motivos = diagnostico if diagnostico is not None else []
     if api_key:
         try:
             _gerar_com_ia(
@@ -87,6 +96,7 @@ def gerar(
             log.info("Arte gerada por IA de imagem: %s", destino.name)
             return destino, "imagem_ia"
         except Exception as erro:
+            motivos.append(f"imagem_ia: {motivo_http(erro)[:200]}")
             log.warning(
                 "Geração de arte por IA de imagem falhou (%s); tentando vetor.",
                 motivo_http(erro),
@@ -104,6 +114,7 @@ def gerar(
             log.info("Arte vetorial gerada e rasterizada: %s", destino.name)
             return destino, "vetor_ia"
         except Exception as erro:
+            motivos.append(f"vetor_ia: {type(erro).__name__}: {str(erro)[:200]}")
             log.warning(
                 "Geração vetorial falhou (%s); usando composição local.", erro
             )
