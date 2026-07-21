@@ -84,9 +84,15 @@ estágio.
 ### 1. Seleção — de onde vem o assunto
 
 Lê um catálogo de produtos (SKU, nome, linha, área de impressão) e uma lista de
-sinais de tendência (tema, público). Escolhe uma combinação, evitando as
-recentes: conteúdo repetido é recusado pela plataforma de publicação dentro de
-24 horas.
+sinais de tendência (tema, público e **linguagem visual**). Escolhe uma
+combinação, evitando as recentes: conteúdo repetido é recusado pela plataforma
+de publicação dentro de 24 horas.
+
+Cada sinal é um movimento estético específico — Memphis dos anos 80, risograph,
+ladrilho hidráulico, terrazzo — e não uma categoria vaga. A diferença aparece no
+desenho: "estética retrô" deixa a escolha visual inteira para o modelo, que
+resolve pelo caminho mais previsível; "Memphis dos anos 80" traz forma, cor e
+vocabulário próprios. São 14 sinais e 3 produtos, 42 combinações.
 
 ### 2. Criação — texto e arte, ao mesmo tempo
 
@@ -161,7 +167,7 @@ em instruções acionáveis.
 |---|---|
 | **svglib + reportlab** | Convertem o SVG da arte em PDF vetorial. Python puro. |
 | **pypdfium2** | Rasteriza o PDF em PNG na resolução da área de impressão. Binário embutido no pacote. |
-| **Pillow** | Compõe a arte na capinha, desenha a camada de texto, recorta a margem transparente do logotipo e produz a arte de reserva. |
+| **Pillow** | Compõe a arte na capinha em escala dobrada e reduz com LANCZOS, desenha a camada de texto, recorta a margem transparente do logotipo e produz a arte de reserva. |
 | **FFmpeg** (via `imageio-ffmpeg`) | Monta o vídeo final: movimento, sobreposição de texto, encerramento com a marca, faixa de áudio e normalização para a especificação do TikTok. Binário embutido no pacote. |
 
 Nem FFmpeg nem o rasterizador exigem instalação no sistema operacional: ambos
@@ -485,7 +491,7 @@ Tudo que um time de marketing ajustaria vive no `config.yaml`, fora do código:
   arte impressa segue a paleta do tema, não a da marca
 - **Proibições** — a lista que os guardrails verificam
 - **Catálogo de produtos** — SKU, nome, linha e área de impressão real
-- **Sinais de tendência** — tema e público de cada gatilho
+- **Sinais de tendência** — tema, público e linguagem visual de cada gatilho
 - **Especificação do vídeo** — resolução, duração, taxa de quadros
 - **Parâmetros de publicação** — privacidade, comentários, Duet, Stitch
 - **Interruptores de custo** — geração de imagem e de vídeo por IA, separados

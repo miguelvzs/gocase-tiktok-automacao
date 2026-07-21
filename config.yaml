@@ -54,21 +54,131 @@ produtos:
 # execuções seguidas não gerem conteúdo idêntico — o Zernio rejeita conteúdo
 # duplicado na mesma conta dentro de 24h com HTTP 409.
 sinais:
-  - id: inverno-retro
-    tema: "estética retrô anos 90 voltando no inverno"
+  # Cada sinal carrega três coisas, e as três entram no briefing da arte:
+  #
+  #   tema     — o assunto, específico. "Estética retrô anos 90" é vago demais
+  #              para render desenho definido; "Memphis dos anos 80" tem forma,
+  #              cor e vocabulário próprios.
+  #   publico  — para quem, o que muda o tom do texto.
+  #   estetica — a linguagem visual, em termos que um ilustrador executaria.
+  #              Sem isto o modelo escolhe o caminho mais previsível e a arte
+  #              sai como clipart.
+  #
+  # A lista é longa de propósito. Com cinco entradas e três produtos, a quarta
+  # execução do dia já repetia combinação — e conteúdo repetido é recusado pela
+  # plataforma de publicação dentro de 24 horas.
+
+  - id: memphis-80
+    tema: "revival Memphis dos anos 80"
     publico: "18-24, universitário"
-  - id: volta-as-aulas
-    tema: "volta às aulas, personalização de material"
-    publico: "16-22, estudante"
-  - id: festa-junina
-    tema: "festa junina reinterpretada em ilustração moderna"
-    publico: "18-30, interior e capital"
-  - id: gamer-neon
-    tema: "cultura gamer, paleta neon e cyber"
-    publico: "16-28, gamer"
-  - id: botanico-minimal
-    tema: "ilustração botânica minimalista"
+    estetica: >-
+      Formas geométricas primárias flutuando sem gravidade, ziguezagues,
+      confete de triângulos e círculos, traços grossos, malha de pontos ao
+      fundo. Contraste alto entre poucas cores saturadas.
+
+  - id: y2k-cromado
+    tema: "Y2K cromado e bolha metálica"
+    publico: "16-24, moda e internet"
+    estetica: >-
+      Superfícies cromadas com reflexo em gradiente radial, bolhas líquidas
+      fundindo-se, brilho especular, estrelas de quatro pontas, halo azulado.
+      Prateado sobre fundo profundo.
+
+  - id: risograph
+    tema: "impressão risograph e sobreposição de tintas"
+    publico: "22-32, design e ilustração"
+    estetica: >-
+      Duas ou três tintas chapadas sobrepostas com leve desalinho, áreas de
+      mistura onde as tintas cruzam, textura de meio-tom em pontos grandes,
+      papel levemente creme aparecendo nas bordas.
+
+  - id: ladrilho-hidraulico
+    tema: "ladrilho hidráulico brasileiro em versão moderna"
+    publico: "25-40, casa e decoração"
+    estetica: >-
+      Padrão modular repetido em grade, simetria de quatro folhas, contorno
+      fino claro sobre campos chapados, cores terrosas e azulejo, formas que
+      se completam entre módulos vizinhos.
+
+  - id: cerrado-botanico
+    tema: "flora do cerrado em ilustração botânica"
     publico: "22-35, design e escritório"
+    estetica: >-
+      Traço botânico de herbário, folhas e inflorescências desenhadas com
+      linha fina, composição assimétrica que sobe pela lateral, verdes
+      acinzentados e terrosos sobre fundo claro de papel.
+
+  - id: vaporwave
+    tema: "vaporwave e horizonte em grade"
+    publico: "18-28, música e internet"
+    estetica: >-
+      Grade em perspectiva sumindo no horizonte, sol listrado grande, montanhas
+      geométricas, névoa em gradiente, magenta e ciano sobre roxo profundo,
+      estrelas finas espalhadas.
+
+  - id: art-deco
+    tema: "geometria art déco"
+    publico: "26-40, moda e joalheria"
+    estetica: >-
+      Leques radiais, arcos concêntricos, linhas douradas finas, simetria
+      vertical rigorosa, degradê metálico, fundo escuro profundo com detalhe
+      linear preciso.
+
+  - id: bauhaus
+    tema: "composição Bauhaus"
+    publico: "24-38, arquitetura e design"
+    estetica: >-
+      Círculo, quadrado e triângulo em cores primárias, sobreposição com
+      transparência gerando cor terciária, grade rigorosa, muito espaço
+      respirando, nenhuma decoração supérflua.
+
+  - id: carnaval-grafico
+    tema: "carnaval em linguagem gráfica contemporânea"
+    publico: "18-30, festa e música"
+    estetica: >-
+      Confete e serpentina em fitas curvas, silhuetas de plumas estilizadas,
+      ritmo diagonal, cores quentes vibrantes sobrepostas com transparência,
+      brilho pontual disperso.
+
+  - id: surf-vintage
+    tema: "surf vintage e litoral"
+    publico: "18-32, praia e esporte"
+    estetica: >-
+      Ondas em faixas concêntricas, sol poente em degradê horizontal, palmeiras
+      em silhueta, granulado sutil, laranja queimado e turquesa desbotado,
+      clima de cartaz antigo.
+
+  - id: constelacoes
+    tema: "mapa estelar e constelações"
+    publico: "20-34, noturno e introspectivo"
+    estetica: >-
+      Pontos de estrela de tamanhos variados ligados por linhas finas, círculos
+      concêntricos de carta celeste, névoa em gradiente radial, azul profundo
+      com dourado pálido.
+
+  - id: terrazzo
+    tema: "terrazzo e pedra reconstituída"
+    publico: "24-38, casa e arquitetura"
+    estetica: >-
+      Lascas irregulares de várias cores espalhadas em densidade desigual sobre
+      base clara, escalas misturadas, distribuição orgânica sem alinhamento,
+      bordas arredondadas.
+
+  - id: psicodelia-70
+    tema: "psicodelia dos anos 70"
+    publico: "18-30, música e festival"
+    estetica: >-
+      Ondulações concêntricas que deformam o quadro, flores estilizadas de
+      pétalas grossas, degradê de laranja para roxo, formas líquidas
+      derretendo, simetria radial.
+
+  - id: gamer-neon
+    tema: "cultura gamer e circuito neon"
+    publico: "16-28, gamer"
+    estetica: >-
+      Traço neon brilhante sobre fundo quase preto, halo difuso ao redor das
+      linhas, trilhas de circuito em ângulo reto, partículas de luz subindo,
+      ciano e magenta em contraste duro.
 
 video:
   largura: 1080

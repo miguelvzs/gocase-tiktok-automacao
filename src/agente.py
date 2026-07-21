@@ -93,9 +93,15 @@ def executar_pipeline(
     # O conceito escrito continua sendo gerado: é ele que alimenta o gerador de
     # imagem quando há cota, e aparece no relatório da execução.
     avisar("criativo", f"Redigindo e desenhando para '{escolha['sinal']['tema']}'")
+    # A estética entra no briefing porque é ela que dá desenho definido. Tema
+    # sozinho — "estética retrô" — deixa a escolha visual inteira para o modelo,
+    # que resolve pelo caminho mais previsível. Descrever a linguagem visual em
+    # termos executáveis é o que separa ilustração de clipart.
+    estetica = escolha["sinal"].get("estetica", "")
     briefing = (
         f"{escolha['sinal']['tema']}. Público: {escolha['sinal'].get('publico', '')}. "
         f"Produto: {escolha['produto']['nome']}."
+        + (f"\n\nLinguagem visual pedida: {estetica.strip()}" if estetica else "")
     )
 
     with ThreadPoolExecutor(max_workers=2) as executor:

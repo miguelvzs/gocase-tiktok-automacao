@@ -79,11 +79,28 @@ ESQUEMA = {
         },
         "gancho": {
             "type": "string",
-            "description": "Frase de abertura em português, até 60 caracteres, exibida no vídeo.",
+            "description": (
+                "Frase que aparece SOBRE o vídeo, até 60 caracteres. É lida em "
+                "menos de um segundo, enquanto o dedo já está subindo — precisa "
+                "criar tensão ou curiosidade, não descrever a imagem. "
+                "Ruim: 'Capinha com estampa botânica' (o vídeo já mostra isso). "
+                "Bom: 'Achei a estampa antes do fabricante'. "
+                "Sem ponto final, sem emoji, sem hashtag."
+            ),
         },
         "legenda": {
             "type": "string",
-            "description": "Legenda do post em português, até 250 caracteres, sem hashtags.",
+            "description": (
+                "Legenda do post, 120 a 250 caracteres, sem hashtags. "
+                "ESTRUTURA em três partes separadas por quebra de linha "
+                "(\\n): "
+                "(1) uma frase curta que continue o gancho em vez de repeti-lo — "
+                "é a única linha visível antes do 'ver mais'; "
+                "(2) uma frase que ligue a tendência ao fato de a marca produzir "
+                "sob demanda, ou seja, por que esta estampa existe hoje; "
+                "(3) uma pergunta direta ao leitor, que dê motivo para comentar. "
+                "Sem emoji. Sem repetir palavra do gancho."
+            ),
         },
         "cta": {
             "type": "string",
@@ -127,6 +144,16 @@ def _sistema(marca: dict[str, Any]) -> str:
         "velocidade e personalização, não catálogo genérico.\n\n"
         f"Proibido, sem exceção:\n{proibido}\n\n"
         "Escreva para TikTok: direto, sem rodeio, sem linguagem corporativa.\n\n"
+        "Como o feed funciona, e o que isso exige do texto:\n"
+        "- O gancho disputa com o polegar. Ele não descreve o que já está na "
+        "tela; ele dá um motivo para ficar.\n"
+        "- Da legenda, só a primeira linha aparece antes do 'ver mais'. Se ela "
+        "não segurar sozinha, o resto não é lido.\n"
+        "- Comentário pesa mais que curtida na distribuição, então a legenda "
+        "termina em pergunta respondível — não em 'o que você acha?', que é "
+        "pergunta vazia, mas em algo específico daquela estampa.\n"
+        "- Escreva como quem manda mensagem, não como quem anuncia. Frases "
+        "curtas. Nada de 'descubra', 'confira', 'imperdível'.\n\n"
         "Português do Brasil correto. Ao dar uma ordem ou convite ao leitor, "
         "use o imperativo na 3ª pessoa — 'Monte a sua', não 'Monta a sua'."
     )

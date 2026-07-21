@@ -24,6 +24,21 @@ def _hex_para_rgb(valor: str) -> tuple[int, int, int]:
     return tuple(int(valor[i : i + 2], 16) for i in (0, 2, 4))  # type: ignore[return-value]
 
 
+# Fator de supersampling: a cena é desenhada nesta escala e reduzida com
+# LANCZOS no fim.
+#
+# O Pillow não antialiasa as formas que desenha. Medindo a borda da capinha num
+# mockup 1080x1920, a transição era de um pixel — (212,188,180) direto para
+# (24,24,43), sem nenhum tom intermediário. Em reta vertical isso não incomoda,
+# mas as quinas arredondadas saíam em degraus visíveis.
+#
+# Desenhar em dobro e reduzir resolve porque a média de quatro pixels vira o
+# meio-tom que faltava. Custa 0,35 s a mais em máquina comum, cerca de 1,8 s no
+# serviço publicado, contra um orçamento de 64 s — e o pico de memória não sai
+# do lugar. Era inviável no teto de 512 MB antigo; com 4 GB, é troco.
+SUPERAMOSTRAGEM = 2
+
+
 def compor(
     *,
     arte: Path,
@@ -32,6 +47,31 @@ def compor(
     largura: int = 1080,
     altura: int = 1920,
 ) -> Path:
+    """Compõe a arte no produto, desenhando em escala dobrada e reduzindo."""
+    fator = SUPERAMOSTRAGEM
+    quadro = _desenhar(
+        arte=arte, paleta=paleta, largura=largura * fator, altura=altura * fator
+    )
+    if fator != 1:
+        quadro = quadro.resize((largura, altura), Image.LANCZOS)
+
+    destino.parent.mkdir(parents=True, exist_ok=True)
+    quadro.save(destino, "PNG")
+    log.info("Mockup composto: %s (%dx supersampling)", destino.name, fator)
+    return destino
+
+
+def _desenhar(
+    *,
+    arte: Path,
+    paleta: dict[str, str],
+    largura: int,
+    altura: int,
+) -> Image.Image:
+    # Os raios de desfoque abaixo foram calibrados para 1080 de largura. Sem
+    # esta escala, desenhar em dobro deixaria as sombras com metade da
+    # suavidade relativa — a peça sairia diferente, não apenas mais limpa.
+    escala = largura / 1080
     fundo = _hex_para_rgb(paleta.get("fundo", "#F7F7F9"))
     escuro = _hex_para_rgb(paleta.get("secundaria", "#1A1A2E"))
     primaria = _hex_para_rgb(paleta.get("primaria", "#FF5A1F"))
@@ -52,7 +92,7 @@ def compor(
         fill=(*primaria, 46),
     )
     quadro = Image.alpha_composite(
-        quadro.convert("RGBA"), halo.filter(ImageFilter.GaussianBlur(90))
+        quadro.convert("RGBA"), halo.filter(ImageFilter.GaussianBlur(90 * escala))
     ).convert("RGB")
 
     # Geometria da capinha: proporção próxima de um smartphone real (~2:1).
@@ -67,12 +107,17 @@ def compor(
     # Sombra projetada.
     sombra = Image.new("RGBA", (largura, altura), (0, 0, 0, 0))
     ImageDraw.Draw(sombra).rounded_rectangle(
-        [esquerda + 14, topo + 26, direita + 14, base + 26],
+        [
+            esquerda + 14 * escala,
+            topo + 26 * escala,
+            direita + 14 * escala,
+            base + 26 * escala,
+        ],
         radius=raio,
         fill=(0, 0, 0, 105),
     )
     quadro = Image.alpha_composite(
-        quadro.convert("RGBA"), sombra.filter(ImageFilter.GaussianBlur(34))
+        quadro.convert("RGBA"), sombra.filter(ImageFilter.GaussianBlur(34 * escala))
     ).convert("RGB")
 
     # Arte recortada na silhueta da capinha.
@@ -143,10 +188,7 @@ def compor(
         Image.composite(brilho.getchannel("A"), Image.new("L", (largura, altura), 0), recorte)
     )
     quadro = Image.alpha_composite(
-        quadro.convert("RGBA"), brilho.filter(ImageFilter.GaussianBlur(12))
+        quadro.convert("RGBA"), brilho.filter(ImageFilter.GaussianBlur(12 * escala))
     ).convert("RGB")
 
-    destino.parent.mkdir(parents=True, exist_ok=True)
-    quadro.save(destino, "PNG")
-    log.info("Mockup composto: %s", destino.name)
-    return destino
+    return quadro

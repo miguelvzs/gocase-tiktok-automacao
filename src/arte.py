@@ -236,13 +236,24 @@ TAGS_PROIBIDAS = {
     "script",
     "image",
     "foreignobject",
-    "use",
     "iframe",
     "clippath",
     "pattern",
     "filter",
     "mask",
 }
+
+# `use` sai da lista de proibidos e ganha regra própria.
+#
+# Ele estava banido junto com os que buscam recurso externo, mas é o elemento
+# certo para repetir uma forma — e repetição é como vetor ganha textura. Sem
+# ele, pedir um campo de duzentos pontos custa duzentas declarações completas;
+# com ele, custa uma definição e duzentas referências curtas.
+#
+# O risco real não é o elemento, é o destino: `use` apontando para fora
+# buscaria recurso remoto. Então a referência precisa ser local, começando em
+# '#'. Conferido que o rasterizador desenha `use` idêntico ao inline.
+XLINK_HREF = "{http://www.w3.org/1999/xlink}href"
 
 
 def _gerar_vetor(
@@ -290,6 +301,20 @@ def _gerar_vetor(
         "aplique gradiente em tudo nem em nada.\n"
         "- Assimetria. Centralizar tudo no eixo é a saída mais previsível.\n"
         "- Densidade desigual: uma região respira, outra concentra detalhe.\n\n"
+        # Sem um piso explícito o modelo entrega vinte formas grandes e a peça
+        # fica pobre de perto. Textura em vetor não existe como recurso: ela é
+        # construída por repetição de elementos pequenos, e isso precisa ser
+        # pedido, porque custa formas.
+        "DENSIDADE — a peça é impressa e olhada de perto:\n"
+        f"- No mínimo 60 elementos. Uma composição com {largura}x{altura} pixels "
+        "e vinte formas grandes fica vazia.\n"
+        "- Construa textura por repetição: campos de pontos com tamanho e "
+        "opacidade variando, hachuras de linhas finas, lascas espalhadas, "
+        "granulado de círculos minúsculos. É assim que vetor ganha superfície.\n"
+        "- Detalhe interno nas formas principais: uma folha tem nervura, um "
+        "planeta tem faixa, uma onda tem espuma. Silhueta sozinha é ícone.\n"
+        "- Acabamento nas bordas do quadro: elementos cortados pela margem "
+        "sugerem que a cena continua além da capinha.\n\n"
         f"TÉCNICO: viewBox='0 0 {largura} {altura}'. Um retângulo de fundo "
         "cobrindo tudo. Sem texto, sem fonte, sem imagem externa, sem script.\n"
         "Disponíveis: path, circle, ellipse, rect, polygon, polyline, line, g, "
@@ -297,6 +322,11 @@ def _gerar_vetor(
         "stroke-opacity, stroke-width, stroke-linecap, stroke-dasharray e "
         "transform. Use transparência para sobrepor planos e radialGradient "
         "para luz e volume.\n"
+        "Para campos de textura, defina a forma uma vez em <defs> e repita com "
+        "<use href='#id' x='..' y='..'>, variando escala e opacidade pelo "
+        "transform. Sai muito mais barato que redeclarar cada elemento, o que "
+        "deixa espaço para a densidade pedida acima. A referência precisa "
+        "começar com '#': apontar para fora é recusado.\n"
         # Ambos são aceitos pelo interpretador e descartados no desenho, o que
         # produziria uma peça errada sem nenhum erro. Medido, não suposto.
         "NUNCA use clipPath, mask, pattern ou filter: o rasterizador os ignora "
@@ -307,7 +337,10 @@ def _gerar_vetor(
     cliente = anthropic.Anthropic(api_key=api_key)
     resposta = cliente.messages.create(
         model=modelo,
-        max_tokens=8000,
+        # Folga generosa: truncar o SVG descarta a peça inteira, e o custo é por
+        # token gerado, não por teto declarado. Com o piso de densidade pedido
+        # acima, um desenho passa de 10 KB — perto demais do limite anterior.
+        max_tokens=20000,
         system=sistema,
         messages=[{"role": "user", "content": f"Desenhe: {conceito}"}],
         # Esforço médio em vez do padrão: mede-se 18 s contra 24 s por desenho,
@@ -325,7 +358,7 @@ def _gerar_vetor(
     import json
 
     pacote = json.loads(texto)
-    svg = _sanear_cores(pacote["svg"])
+    svg = _sanear_namespace(_sanear_cores(pacote["svg"]))
     _conferir_svg(svg)
     _rasterizar(svg, destino, tamanho)
     log.info("Conceito da arte: %s", pacote.get("conceito", "")[:200])
@@ -356,6 +389,22 @@ _COR_COMO_ESTILO = re.compile(rf'({_NOMES_DE_COR})(\s*:\s*)(#[^;"\']*)')
 _ATRIBUTO_DE_COR = re.compile(rf"(?:{_NOMES_DE_COR})\s*[:=]\s*[\"']?\s*(#[^\"';\s>)]*)")
 
 
+def _sanear_namespace(svg: str) -> str:
+    """Declara o namespace do xlink quando o documento usa sem declarar.
+
+    Agora que `use` é permitido, o modelo às vezes escreve `xlink:href` e
+    esquece o `xmlns:xlink` na raiz. O interpretador rejeita com "unbound
+    prefix" e a peça inteira é perdida por uma declaração ausente. Acrescentar o
+    que falta não muda o desenho nem afrouxa nenhuma verificação — a origem do
+    `use` continua sendo conferida logo abaixo.
+    """
+    if "xlink:" not in svg or "xmlns:xlink" in svg:
+        return svg
+    return re.sub(
+        r"<svg\b", '<svg xmlns:xlink="http://www.w3.org/1999/xlink"', svg, count=1
+    )
+
+
 def _sanear_cores(svg: str) -> str:
     """Junta cores hexadecimais que vieram partidas por espaço."""
 
@@ -383,6 +432,12 @@ def _conferir_svg(svg: str) -> None:
         tag = elemento.tag.split("}")[-1].lower()
         if tag in TAGS_PROIBIDAS:
             raise ValueError(f"SVG contém elemento não permitido: <{tag}>")
+        if tag == "use":
+            alvo = elemento.get("href") or elemento.get(XLINK_HREF) or ""
+            if not alvo.startswith("#"):
+                raise ValueError(
+                    f"<use> só pode referenciar o próprio documento, não {alvo!r}"
+                )
     if re.search(r'(xlink:)?href\s*=\s*["\']\s*(https?:|//|file:)', svg, re.I):
         raise ValueError("SVG referencia recurso externo")
 

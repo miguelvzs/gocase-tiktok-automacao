@@ -320,6 +320,7 @@ def testar_saneamento_do_svg() -> None:
         ("pattern", '<defs><pattern id="p"><circle r="3"/></pattern></defs>'),
         ("mask", '<defs><mask id="m"><rect width="9" height="9"/></mask></defs>'),
         ("script", "<script>alert(1)</script>"),
+        ("use externo", '<use href="https://exemplo.com/x.svg#a"/>'),
     ):
         try:
             arte._conferir_svg(envolver(corpo))
@@ -334,6 +335,21 @@ def testar_saneamento_do_svg() -> None:
     except ValueError as erro:
         legivel = "cor" in str(erro).lower()
     checar("cor inválida vira erro que diz ser cor", legivel)
+
+    # `use` local é o que torna textura densa barata em tokens; só o destino
+    # externo é perigoso.
+    com_use = envolver(
+        '<defs><circle id="p" r="2" fill="#fff"/></defs>'
+        '<use href="#p" x="10" y="10"/><use xlink:href="#p" x="30" y="20"/>'
+    )
+    checar(
+        "namespace do xlink ausente é declarado em vez de derrubar a peça",
+        "xmlns:xlink" in arte._sanear_namespace(com_use),
+    )
+    checar(
+        "<use> apontando para o próprio documento é aceito",
+        arte._conferir_svg(arte._sanear_namespace(com_use)) is None,
+    )
 
     checar(
         "SVG saudável com os recursos novos passa",
