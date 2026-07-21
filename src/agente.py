@@ -21,7 +21,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any, Callable
 
-from . import arte, criativo, mockup, tendencia, video
+from . import arte, criativo, mockup, radar, tendencia, video
 from .config import carregar, modo_rascunho, segredo
 from .publicador import ErroPublicacao, Publicador
 
@@ -66,10 +66,36 @@ def executar_pipeline(
         marca_tempo = agora
 
     # 1. Sinal de tendência + produto do catálogo
+    #
+    # O radar lê o que o Brasil está pesquisando agora e faz a triagem. Ele
+    # recusa muito mais do que aprova — política, tragédia, nome de pessoa e
+    # clube de futebol dominam as altas, e nada disso vira estampa. Quando não
+    # sobra nada, o catálogo curado assume, que é o caminho mais frequente.
+    chave_texto = segredo("ANTHROPIC_API_KEY", obrigatorio=True)
+    sinais_do_radar: list[dict[str, Any]] = []
+    recusados: list[dict[str, str]] = []
+    if cfg.get("radar", {}).get("usar_tendencias_reais", False) and not sinal_id:
+        avisar("radar", "Lendo tendências reais e filtrando")
+        sinais_do_radar, recusados = radar.buscar_sinais(
+            api_key=chave_texto,
+            modelo=cfg["ia"]["modelo_texto"],
+            regiao=cfg.get("radar", {}).get("regiao", "BR"),
+        )
+        relatorio["radar"] = {
+            "aprovados": [s["tema"] for s in sinais_do_radar],
+            "recusados": recusados,
+        }
+        cronometrar("radar")
+
     avisar("sinal", "Selecionando tendência e produto")
-    escolha = tendencia.selecionar(cfg, sinal_id=sinal_id, sku=sku)
+    escolha = tendencia.selecionar(
+        cfg, sinal_id=sinal_id, sku=sku, sinais_do_radar=sinais_do_radar
+    )
     relatorio["sinal"] = escolha["sinal"]
     relatorio["produto"] = escolha["produto"]
+    relatorio["etapas"]["origem_do_tema"] = (
+        "radar" if escolha["sinal"].get("origem") == "radar" else "catalogo"
+    )
 
     # A chave é a mesma para imagem e vídeo, mas os custos são muito diferentes:
     # vídeo custa cerca de 30 vezes mais por execução. Por isso cada etapa tem
@@ -78,7 +104,6 @@ def executar_pipeline(
     google_key = segredo("GOOGLE_API_KEY")
     chave_imagem = google_key if cfg["ia"].get("usar_ia_imagem", True) else None
     chave_video = google_key if cfg["ia"].get("usar_ia_video", False) else None
-    chave_texto = segredo("ANTHROPIC_API_KEY", obrigatorio=True)
     area = escolha["produto"].get("area_arte", [1024, 1024])
 
     # 2 e 3. Texto e arte, em paralelo.

@@ -281,6 +281,90 @@ def testar_midia() -> None:
 # ------------------------------------------------------------------ n8n e API
 
 
+def testar_radar() -> None:
+    """A triagem de tendências reais, exercitada sem tocar em rede nem IA.
+
+    O que importa aqui não é a fonte — é o comportamento quando ela não serve.
+    Numa leitura real do Google Trends no Brasil, as dez altas do momento eram
+    política, processo judicial, clube de futebol, nome de pessoa e um provável
+    acidente rodoviário. Nenhuma virava estampa. Recusar tudo e devolver a
+    escolha ao catálogo é o caminho mais frequente, e precisa ser o mais seguro.
+    """
+    print("\nRadar de tendências reais")
+    from src.config import carregar
+    from src import radar, tendencia
+
+    cfg = carregar()
+    checar(
+        "config declara o radar e a região",
+        bool(cfg.get("radar", {}).get("regiao")),
+        str(cfg.get("radar")),
+    )
+
+    # Sem credencial o radar nem tenta: devolve vazio em vez de levantar.
+    checar("sem chave de IA, o radar devolve vazio", radar.buscar_sinais(
+        api_key=None, modelo="x") == ([], []))
+
+    # Fonte fora do ar não pode derrubar a publicação.
+    original = radar._buscar
+    try:
+        radar._buscar = lambda regiao: (_ for _ in ()).throw(RuntimeError("rede caiu"))
+        checar(
+            "fonte indisponível não derruba a execução",
+            radar.buscar_sinais(api_key="sk-teste", modelo="x") == ([], []),
+        )
+        radar._buscar = lambda regiao: []
+        checar(
+            "feed vazio não derruba a execução",
+            radar.buscar_sinais(api_key="sk-teste", modelo="x") == ([], []),
+        )
+    finally:
+        radar._buscar = original
+
+    # Sem aprovados, a seleção precisa cair no catálogo.
+    escolha = tendencia.selecionar(cfg, sinais_do_radar=[])
+    checar(
+        "sem aprovados, o tema vem do catálogo",
+        escolha["sinal"]["id"] in {s["id"] for s in cfg["sinais"]},
+        escolha["sinal"]["id"],
+    )
+
+    # Com aprovados, eles têm preferência sobre o catálogo.
+    aprovado = {
+        "id": "radar-teste", "tema": "teste", "publico": "16-32",
+        "estetica": "formas", "origem": "radar",
+    }
+    escolha = tendencia.selecionar(cfg, sinais_do_radar=[aprovado])
+    checar(
+        "com aprovados, o tema vem do radar",
+        escolha["sinal"]["id"] == "radar-teste"
+        and escolha["sinal"]["origem"] == "radar",
+    )
+
+    # Fixar o sinal continua mandando, mesmo com o radar ligado.
+    escolha = tendencia.selecionar(
+        cfg, sinal_id="gamer-neon", sinais_do_radar=[aprovado]
+    )
+    checar(
+        "sinal fixado tem precedência sobre o radar",
+        escolha["sinal"]["id"] == "gamer-neon",
+    )
+
+    checar(
+        "o identificador gerado é estável e sem acento",
+        radar._identificador("Coração de Ouro!") == "radar-cora-o-de-ouro",
+        radar._identificador("Coração de Ouro!"),
+    )
+
+    # O histórico precisa sobreviver ao deploy: no ambiente publicado ele mora
+    # num volume, apontado por variável de ambiente.
+    checar(
+        "o caminho do histórico é configurável por ambiente",
+        "DIRETORIO_DADOS" in (RAIZ / "src" / "tendencia.py").read_text(encoding="utf-8")
+        and 'DIRETORIO_DADOS = "/dados"' in (RAIZ / "fly.toml").read_text(encoding="utf-8"),
+    )
+
+
 def testar_saneamento_do_svg() -> None:
     """Defesas do SVG vindo da IA: cor partida e tags que somem em silêncio."""
     print("\nSaneamento do SVG gerado")
@@ -628,6 +712,7 @@ def main() -> int:
         testar_selecao,
         testar_guardrails,
         testar_midia,
+        testar_radar,
         testar_saneamento_do_svg,
         testar_fonte_com_acentos,
         testar_assinatura_de_marca,

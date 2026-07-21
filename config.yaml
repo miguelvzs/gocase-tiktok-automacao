@@ -196,6 +196,22 @@ sinais:
       mistura onde as tintas cruzam, textura de meio-tom em pontos grandes,
       papel levemente creme aparecendo nas bordas.
 
+# Radar de tendências reais. Lê o que o Brasil está pesquisando agora no feed
+# público do Google Trends e submete cada busca a uma triagem.
+#
+# A triagem RECUSA muito mais do que aprova, e isso é o comportamento correto.
+# Numa leitura real, as dez altas do momento eram: 8 de janeiro, Deltan
+# Dallagnol, Banco Master, tribunal de contas, liga dos campeões, Fenerbahçe,
+# MG-188, Bianca Andrade, balanço da copa e climatização. Política, processo,
+# notícia financeira, clube de futebol, nome de pessoa e provável acidente
+# rodoviário — nenhum vira estampa, e vários violam as proibições da marca.
+#
+# Quando nada passa, o catálogo curado acima assume. O relatório da execução
+# registra a origem do tema e a lista de recusas com o motivo de cada uma.
+radar:
+  usar_tendencias_reais: true
+  regiao: BR
+
 video:
   largura: 1080
   altura: 1920

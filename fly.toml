@@ -22,6 +22,21 @@ primary_region = "iad"
 
 [env]
   MODO_RASCUNHO = "false"
+  DIRETORIO_DADOS = "/dados"
+
+# Volume para o histórico de combinações já publicadas.
+#
+# O arquivo morava dentro da imagem, o que bastava enquanto o serviço era um
+# processo de vida longa. Aqui a máquina dorme entre execuções e é recriada a
+# cada deploy, então a memória do que já foi publicado zerava junto — e
+# combinação repetida é recusada como conteúdo duplicado dentro de 24 horas.
+#
+# São poucos kilobytes; o mínimo de 1 GB custa US$ 0,15 por mês.
+#
+#   fly volumes create dados --size 1 --region iad
+[mounts]
+  source = "dados"
+  destination = "/dados"
 
 [http_service]
   internal_port = 8080

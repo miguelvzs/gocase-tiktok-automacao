@@ -12,6 +12,7 @@ par (sinal, produto) faz a publicação falhar depois de todo o custo de geraç�
 from __future__ import annotations
 
 import json
+import os
 import logging
 import random
 from datetime import date
@@ -21,7 +22,18 @@ from typing import Any
 log = logging.getLogger(__name__)
 
 RAIZ = Path(__file__).resolve().parent.parent
-HISTORICO = RAIZ / "output" / "historico.json"
+# O histórico de combinações já usadas precisa sobreviver ao deploy.
+#
+# Ele morava em `output/`, dentro da imagem, o que funcionava enquanto o serviço
+# era um processo de vida longa. Com máquina que dorme entre execuções e é
+# recriada a cada publicação de versão, a memória zerava junto — e combinação
+# repetida é recusada pela plataforma como conteúdo duplicado dentro de 24h.
+#
+# `DIRETORIO_DADOS` aponta para o volume montado no ambiente publicado. Sem a
+# variável, cai em `output/`, que é o certo para a máquina de desenvolvimento:
+# ninguém precisa montar volume para rodar `python main.py`.
+DIRETORIO_DADOS = Path(os.environ.get("DIRETORIO_DADOS") or (RAIZ / "output"))
+HISTORICO = DIRETORIO_DADOS / "historico.json"
 
 
 def _historico() -> list[str]:
@@ -48,13 +60,21 @@ def selecionar(
     config: dict[str, Any],
     sinal_id: str | None = None,
     sku: str | None = None,
+    sinais_do_radar: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Escolhe o par (sinal, produto) desta execução.
 
     Com `sinal_id`/`sku` a escolha é determinística — útil para reproduzir uma
     execução. Sem eles, evita as combinações recentes.
+
+    `sinais_do_radar` são assuntos lidos do mundo e já aprovados na triagem do
+    módulo `radar`. Quando existem, têm preferência sobre o catálogo: são o que
+    está em alta agora, e o catálogo é a curadoria que sempre funciona. Na
+    maioria das leituras a lista vem vazia, porque quase tudo em alta é notícia.
     """
     sinais = config.get("sinais") or []
+    if sinais_do_radar and not sinal_id:
+        sinais = sinais_do_radar
     produtos = config.get("produtos") or []
     if not sinais or not produtos:
         raise ValueError("config.yaml precisa de ao menos um sinal e um produto.")
