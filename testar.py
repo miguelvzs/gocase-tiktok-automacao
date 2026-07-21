@@ -281,6 +281,48 @@ def testar_midia() -> None:
 # ------------------------------------------------------------------ n8n e API
 
 
+def testar_fonte_com_acentos() -> None:
+    """A fonte precisa desenhar acentos no ambiente publicado, não só aqui.
+
+    Este bloco existe por causa de um defeito que chegou ao ar: um post saiu com
+    "Arraiá em versão ilustração" impresso como "Arrai□ em vers□o ilustra□□o".
+    A imagem de execução não traz nenhuma fonte do sistema, então a seleção caía
+    na fonte embutida do Pillow, que não cobre latim acentuado. Nenhum teste
+    pegava porque todos rodavam em máquina com fontes instaladas.
+
+    A verificação decisiva é a última: ela ignora as fontes do sistema e exige
+    que a alternativa embarcada, a única presente no container, dê conta.
+    """
+    print("\nFonte do texto em tela")
+    from PIL import Image, ImageDraw, ImageFont
+    from src import video
+
+    fonte = video._fonte(48)
+    checar(
+        "fonte escolhida desenha acentos",
+        video._desenha_acentos(fonte),
+        Path(video._caminho_fonte()).name,
+    )
+
+    # Nenhum acento pode sair como a caixa de glifo ausente.
+    def marca(texto: str) -> bytes:
+        imagem = Image.new("L", (400, 80), 0)
+        ImageDraw.Draw(imagem).text((4, 2), texto, font=fonte, fill=255)
+        return imagem.tobytes()
+
+    checar(
+        "palavra acentuada difere da mesma sem acento",
+        marca("Arraiá versão ilustração") != marca("Arraia versao ilustracao"),
+    )
+
+    embarcada = ImageFont.truetype(video._fonte_embarcada(), 48)
+    checar(
+        "fonte embarcada cobre acentos sem o sistema operacional",
+        video._desenha_acentos(embarcada),
+        "reportlab/fonts/VeraBd.ttf",
+    )
+
+
 def testar_assinatura_de_marca() -> None:
     """O logotipo é opcional e sua ausência não pode derrubar a publicação."""
     print("\nAssinatura de marca")
@@ -500,6 +542,7 @@ def main() -> int:
         testar_selecao,
         testar_guardrails,
         testar_midia,
+        testar_fonte_com_acentos,
         testar_assinatura_de_marca,
         testar_integracoes,
         testar_parsers_do_publicador,

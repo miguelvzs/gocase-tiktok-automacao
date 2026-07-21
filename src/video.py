@@ -417,20 +417,74 @@ def _ken_burns(largura: int, altura: int, fps: int, duracao: int, zoom: float) -
 # ------------------------------------------------------------------- legenda
 
 
-def _fonte(tamanho: int) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
-    """Fonte escalável sem depender de caminho do sistema operacional."""
-    for caminho in (
-        "C:/Windows/Fonts/segoeuib.ttf",
-        "C:/Windows/Fonts/arialbd.ttf",
-        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
-        "/System/Library/Fonts/Supplemental/Arial Bold.ttf",
-    ):
+def _fonte_embarcada() -> str:
+    """Fonte que viaja dentro de um pacote pip, não do sistema operacional.
+
+    O reportlab já é dependência — converte o SVG da arte em PDF — e distribui
+    a família Bitstream Vera nos próprios arquivos. Isso dá uma fonte com
+    cobertura latina completa em qualquer máquina, sem instalar nada.
+    """
+    import reportlab
+
+    return str(Path(reportlab.__file__).resolve().parent / "fonts" / "VeraBd.ttf")
+
+
+# A ordem começa pelas fontes do sistema, melhores tipograficamente, e termina
+# na embarcada, que é a única garantida. Nenhuma entra sem passar na conferência
+# de acentos abaixo.
+CANDIDATAS_FONTE = (
+    "C:/Windows/Fonts/segoeuib.ttf",
+    "C:/Windows/Fonts/arialbd.ttf",
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+    "/System/Library/Fonts/Supplemental/Arial Bold.ttf",
+)
+
+# Um caractere que nenhuma fonte real implementa. Serve de gabarito do desenho
+# de "glifo ausente" da própria fonte — a caixa vazia.
+AUSENTE = "￾"
+
+# Cobre os acentos que o português usa. Basta um faltar para a fonte servir.
+AMOSTRA_ACENTOS = "áàâãéêíóôõúüç"
+
+
+def _desenha_acentos(fonte) -> bool:
+    """Confere se a fonte desenha acentos de verdade, não caixas vazias.
+
+    Existe porque uma publicação real saiu com "Arraiá em versão ilustração"
+    virando "Arrai□ em vers□o ilustra□□o". A imagem de execução não traz nenhuma
+    fonte do sistema, então a busca caía na fonte embutida do Pillow, que não
+    cobre latim acentuado. Testar em máquina de desenvolvimento não pega isto:
+    lá o Windows tem Segoe UI e o texto sai perfeito.
+
+    Comparar contra o caractere ausente é mais confiável do que consultar a
+    tabela de glifos: é exatamente o que o usuário veria na tela.
+    """
+    def desenho(texto: str) -> bytes:
+        imagem = Image.new("L", (64, 64), 0)
+        ImageDraw.Draw(imagem).text((4, 2), texto, font=fonte, fill=255)
+        return imagem.tobytes()
+
+    caixa_vazia = desenho(AUSENTE)
+    return all(desenho(letra) != caixa_vazia for letra in AMOSTRA_ACENTOS)
+
+
+@lru_cache(maxsize=1)
+def _caminho_fonte() -> str:
+    """Primeira candidata que realmente desenha acentos."""
+    for caminho in (*CANDIDATAS_FONTE, _fonte_embarcada()):
         try:
-            return ImageFont.truetype(caminho, tamanho)
-        except Exception:
-            continue
-    # Pillow >= 10.1 aceita tamanho no default: portátil em qualquer máquina.
-    return ImageFont.load_default(size=tamanho)
+            if _desenha_acentos(ImageFont.truetype(caminho, 40)):
+                log.info("Fonte do texto: %s", caminho)
+                return caminho
+        except OSError:
+            continue  # ausente nesta máquina; a próxima candidata resolve
+    raise RuntimeError(
+        "Nenhuma fonte com acentos disponível — nem a embarcada pelo reportlab."
+    )
+
+
+def _fonte(tamanho: int) -> ImageFont.FreeTypeFont:
+    return ImageFont.truetype(_caminho_fonte(), tamanho)
 
 
 def _quebrar(texto: str, fonte, largura_max: int, desenho: ImageDraw.ImageDraw) -> list[str]:
