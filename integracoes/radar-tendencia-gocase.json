@@ -125,7 +125,12 @@
       "parameters": {
         "url": "={{ $('Configuração').first().json.api_url }}/jobs/{{ $('Dispara o job').first().json.job_id }}",
         "options": {
-          "timeout": 60000
+          "timeout": 60000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
         }
       },
       "id": "a1000000-0000-4000-8000-000000000006",
@@ -138,7 +143,8 @@
       ],
       "retryOnFail": true,
       "maxTries": 3,
-      "waitBetweenTries": 5000
+      "waitBetweenTries": 5000,
+      "notes": "neverError: um job vive em memória e some se o serviço reiniciar — um redeploy no meio da execução, por exemplo. A consulta devolve 404 e, sem isto, o nó falharia sem explicação. Com isto o estado não bate com 'concluido' e o fluxo cai em Falha tratada, que mostra o motivo."
     },
     {
       "parameters": {

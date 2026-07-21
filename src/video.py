@@ -59,10 +59,19 @@ def _ffmpeg() -> str:
 # CRF baixo e compensar o preset rápido.
 X264_ECONOMICO = (
     "threads=1:lookahead_threads=1:sliced-threads=0:"
-    "rc-lookahead=10:sync-lookahead=0:ref=2:bframes=0"
+    "rc-lookahead=10:sync-lookahead=0:ref=1:bframes=0"
 )
 PRESET = "veryfast"
 CRF = "20"
+
+# Uma imagem parada entra com um único quadro em t=0. Um fade programado para o
+# fim do vídeo não teria quadros onde acontecer, e o overlay repetiria o quadro
+# inicial — com alfa zero, o elemento simplesmente não apareceria.
+#
+# `-loop 1` na entrada resolve, mas faz o demuxer bufferizar e custa cerca de
+# 150 MB por imagem. Repetir o quadro dentro do grafo de filtros tem o mesmo
+# efeito por 8 MB: medido em 393,8 MB contra 198,6 MB com duas imagens.
+REPETIR_QUADRO = "loop=loop=-1:size=1:start=0"
 
 
 def _rodar(argumentos: list[str]) -> None:
@@ -469,9 +478,7 @@ def _finalizar(
     tem_audio = _tem_audio(base)
     argumentos = [
         "-i", str(base),
-        # `-loop 1` também na legenda: sem ele a camada existe só em t=0, e um
-        # fade programado para o fim não teria quadros onde acontecer.
-        "-loop", "1", "-i", str(sobreposicao),
+        "-i", str(sobreposicao),
     ]
 
     # Índices dos inputs são posicionais no FFmpeg, então precisam ser
@@ -480,11 +487,7 @@ def _finalizar(
     proximo = 2
     indice_logo = None
     if logo is not None:
-        # `-loop 1` é obrigatório: uma imagem parada entra com um único quadro
-        # em t=0, e o fade programado para os últimos segundos nunca chegaria a
-        # acontecer. O overlay repetiria o quadro inicial, que está com alfa
-        # zero — o logotipo simplesmente não apareceria.
-        argumentos += ["-loop", "1", "-i", str(logo)]
+        argumentos += ["-i", str(logo)]
         indice_logo = proximo
         proximo += 1
     indice_audio = None
@@ -510,13 +513,14 @@ def _finalizar(
         # fundo claro fica ilegível e lê como resíduo, não como camada.
         grafo = (
             f"{filtro_base}"
-            f"[1:v]format=rgba,fade=t=out:st={entrada:.2f}:d=0.5:alpha=1[texto];"
+            f"[1:v]{REPETIR_QUADRO},format=rgba,"
+            f"fade=t=out:st={entrada:.2f}:d=0.5:alpha=1[texto];"
             f"[bg][texto]overlay=0:0:format=auto[comtexto];"
             f"color=c={_para_hex(cor_veu)}:s={largura}x{altura}:"
             f"r={fps}:d={duracao},format=rgba,colorchannelmixer=aa=0.90,"
             f"fade=t=in:st={entrada:.2f}:d=0.6:alpha=1[veu];"
             f"[comtexto][veu]overlay=0:0:format=auto[fechado];"
-            f"[{indice_logo}:v]format=rgba,scale={largura_logo}:-1,"
+            f"[{indice_logo}:v]{REPETIR_QUADRO},format=rgba,scale={largura_logo}:-1,"
             f"fade=t=in:st={entrada + 0.25:.2f}:d=0.6:alpha=1[marca];"
             f"[fechado][marca]overlay=(W-w)/2:(H-h)/2:format=auto[v]"
         )
